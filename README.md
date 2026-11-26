@@ -5,6 +5,18 @@ online content sources. The main goal of the fork is to make the best reading ma
 
 ![Android 6.0](https://img.shields.io/badge/android-6.0+-brightgreen) [![Discord](https://img.shields.io/discord/898363402467045416?color=5865f2&label=discord)](https://discord.gg/sfPJSQNxfW) [![License](https://img.shields.io/github/license/KotatsuApp/Kotatsu)](https://github.com/KotatsuApp/Kotatsu/blob/devel/LICENSE)
 
+### Key Enhancements & Differences from Original Kotatsu
+
+**Why Kotatsu-Redo?** Kotatsu-Redo addresses the biggest friction points in modern manga & manhwa reading:
+
+- 🌟 **Continue Reading Hero Rail**: An ambient, dynamic-palette hero carousel on your Favorites tab showing current progress, chapter badges, and instant one-tap resume without digging through History.
+- ⚡ **New Chapters Rail with Quick Dismiss**: Unread chapter updates (`+1`, `+2`, etc.) surfaced directly on your shelf with category filtering and one-tap dismiss (`✕`), keeping your queue clean and organized.
+- 🔄 **Smart Hybrid Scanlator Priority**: Automatic scanlator group detection and fallback. Set preferred scanlators (e.g., Asura Scans, Official) with automatic hybrid bridging—if another group drops the latest chapter first, it surfaces on top until your preferred group catches up. Zero duplicate chapter clutter!
+- ☁️ **Two-Way AniList Progress Sync**: True bidirectional sync that pulls progress from AniList made on other devices, protects against regressions with a monotonic merger, and prevents scrobble echo loops.
+- 💎 **Compact Floating Liquid Glass Navigation**: Modern 58dp floating pill navigation bar with frosted acrylic blur and active indicator pill, maximizing vertical reading real estate.
+- 📑 **Optimized Category Flow**: Natural reading-first tab ordering (`Reading` → `Read later` → `Paused` → `All favourites` → `Dropped` → `Completed`).
+- 🕒 **Date-Grouped History**: Reading history grouped intuitively by date ("Today", "Yesterday", and earlier).
+
 ### Main Features
 
 <div align="left">
