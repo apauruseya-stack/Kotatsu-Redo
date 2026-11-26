@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.onEach
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.bookmarks.ui.AllBookmarksFragment
 import org.koitharu.kotatsu.core.nav.AppRouter
+import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.NavItem
 import org.koitharu.kotatsu.core.ui.util.RecyclerViewOwner
@@ -112,7 +113,15 @@ class MainNavigationDelegate(
 
 	fun onCreate(lifecycleOwner: LifecycleOwner, savedInstanceState: Bundle?) {
 		if (navBar.menu.isEmpty()) {
-			createMenu(settings.mainNavItems, navBar.menu)
+			val items = if (settings.isLiquidGlass) {
+				settings.mainNavItems
+					.filter { it != NavItem.HISTORY }
+					.map { if (it == NavItem.FEED) NavItem.SETTINGS else it }
+					.distinct()
+			} else {
+				settings.mainNavItems
+			}
+			createMenu(items, navBar.menu)
 		}
 		observeSettings(lifecycleOwner)
 		val fragment = primaryFragment
@@ -127,6 +136,9 @@ class MainNavigationDelegate(
 				firstItem()?.itemId ?: navBar.selectedItemId
 			} else {
 				navBar.selectedItemId
+			}
+			if (navBar.selectedItemId != itemId) {
+				navBar.selectedItemId = itemId
 			}
 			onNavigationItemSelected(itemId)
 		}
@@ -198,6 +210,12 @@ class MainNavigationDelegate(
 			R.id.nav_suggestions -> SuggestionsFragment::class.java
 			R.id.nav_bookmarks -> AllBookmarksFragment::class.java
 			R.id.nav_updated -> UpdatesFragment::class.java
+			R.id.nav_settings -> {
+				val context = navBar.context
+				(context as? MainActivity)?.router?.openSettings()
+					?: context.startActivity(android.content.Intent(context, org.koitharu.kotatsu.settings.SettingsActivity::class.java))
+				return false
+			}
 			else -> return false
 		}
 		if (!setPrimaryFragment(newFragment)) {
@@ -276,9 +294,18 @@ class MainNavigationDelegate(
 				if (navBar is FloatingBottomNavigationView) {
 					// The Compose face renders its own items, so it needs the menu contents pushed to
 					// it separately - the MenuItems themselves only drive the legacy fallback.
+					val composeItems = if (settings.isLiquidGlass) {
+						settings.mainNavItems
+							.filter { it != NavItem.HISTORY }
+							.map { if (it == NavItem.FEED) NavItem.SETTINGS else it }
+							.distinct()
+					} else {
+						settings.mainNavItems
+					}
 					navBar.setUseLegacyNavigation(!isFloating)
-					navBar.setComposeItems(settings.mainNavItems)
+					navBar.setComposeItems(composeItems)
 					navBar.setComposeLabeled(isLabeled)
+					navBar.setLiquidGlass(settings.isLiquidGlass)
 					navBar.setComposeItemVisibility(R.id.nav_suggestions, settings.isSuggestionsEnabled)
 					navBar.setComposeItemVisibility(R.id.nav_feed, settings.isTrackerEnabled)
 				}

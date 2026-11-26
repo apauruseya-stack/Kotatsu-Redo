@@ -686,7 +686,24 @@ class ReaderViewModel @Inject constructor(
                 if (chapter.branch == requestedBranch) {
                     getTrackedUnreadState(manga, history, chapter) ?: ReaderState(history)
                 } else {
-                    ReaderState(manga, requestedBranch)
+                    val branchChapters = manga.getChapters(requestedBranch)
+                    val equivalentChapter = if (chapter.number > 0f) {
+                        branchChapters.firstOrNull { it.number == chapter.number }
+                            ?: branchChapters.lastOrNull { it.number > 0f && it.number <= chapter.number }
+                    } else if (!chapter.title.isNullOrEmpty()) {
+                        branchChapters.firstOrNull { it.title == chapter.title }
+                    } else {
+                        null
+                    }
+                    if (equivalentChapter != null) {
+                        ReaderState(
+                            chapterId = equivalentChapter.id,
+                            page = history.page,
+                            scroll = history.scroll,
+                        )
+                    } else {
+                        ReaderState(manga, requestedBranch)
+                    }
                 }
             } else {
                 getTrackedUnreadState(manga, history, chapter) ?: ReaderState(history)

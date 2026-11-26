@@ -71,7 +71,7 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		get() {
 			val raw = prefs.getString(KEY_NAV_MAIN, null)?.split(',')
 			return if (raw.isNullOrEmpty()) {
-				listOf(NavItem.HISTORY, NavItem.FAVORITES, NavItem.EXPLORE, NavItem.SOURCES, NavItem.FEED)
+				listOf(NavItem.HISTORY, NavItem.FAVORITES, NavItem.EXPLORE, NavItem.SOURCES, NavItem.SETTINGS)
 			} else {
 				withSourcesTab(raw.mapNotNull { x -> NavItem.entries.find(x) }.ifEmpty { listOf(NavItem.EXPLORE) })
 			}
@@ -90,10 +90,56 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 
 	val isFloatingNavBar: Boolean
 		get() = if (prefs.contains(KEY_FLOATING_NAV)) {
-			prefs.getBoolean(KEY_FLOATING_NAV, false)
+			prefs.getBoolean(KEY_FLOATING_NAV, true)
 		} else {
-			colorScheme == ColorScheme.EXPRESSIVE
+			true
 		}
+
+	val isLiquidGlass: Boolean
+		get() = prefs.getBoolean(KEY_LIQUID_GLASS, true)
+
+	var newChaptersRailCategories: Set<String>
+		get() = prefs.getStringSet(KEY_NEW_CHAPTERS_CATEGORIES, null) ?: emptySet()
+		set(value) = prefs.edit { putStringSet(KEY_NEW_CHAPTERS_CATEGORIES, value) }
+
+	val isNewChaptersRailCategoriesConfigured: Boolean
+		get() = prefs.getStringSet(KEY_NEW_CHAPTERS_CATEGORIES, null) != null
+
+	var newChaptersRailCategoryIds: Set<Long>
+		get() = prefs.getStringSet(KEY_NEW_CHAPTERS_CATEGORIES, null)?.mapNotNullTo(HashSet()) { it.toLongOrNull() } ?: emptySet()
+		set(value) = prefs.edit { putStringSet(KEY_NEW_CHAPTERS_CATEGORIES, value.mapTo(HashSet()) { it.toString() }) }
+
+	fun getPreferredScanlator(mangaId: Long): String? =
+		prefs.getString("preferred_scanlator_$mangaId", null)
+
+	fun setPreferredScanlator(mangaId: Long, scanlator: String?) {
+		prefs.edit {
+			if (scanlator == null) {
+				remove("preferred_scanlator_$mangaId")
+			} else {
+				putString("preferred_scanlator_$mangaId", scanlator)
+			}
+		}
+	}
+
+	fun hasPreferredScanlator(mangaId: Long): Boolean =
+		prefs.contains("preferred_scanlator_$mangaId")
+
+	var isAniListSyncEnabled: Boolean
+		get() = prefs.getBoolean(KEY_ANILIST_SYNC_ENABLED, true)
+		set(value) = prefs.edit { putBoolean(KEY_ANILIST_SYNC_ENABLED, value) }
+
+	var aniListLastSyncTime: Long
+		get() = prefs.getLong(KEY_ANILIST_LAST_SYNC_TIME, 0L)
+		set(value) = prefs.edit { putLong(KEY_ANILIST_LAST_SYNC_TIME, value) }
+
+	var aniListLastSyncRemoteUpdatedAt: Long
+		get() = prefs.getLong(KEY_ANILIST_LAST_SYNC_REMOTE_UPDATED_AT, 0L)
+		set(value) = prefs.edit { putLong(KEY_ANILIST_LAST_SYNC_REMOTE_UPDATED_AT, value) }
+
+	var trackingCounterVersion: Int
+		get() = prefs.getInt(KEY_TRACKING_COUNTER_VERSION, 0)
+		set(value) = prefs.edit { putInt(KEY_TRACKING_COUNTER_VERSION, value) }
 
 	val isMainFabEnabled: Boolean
 		get() = prefs.getBoolean(KEY_MAIN_FAB, true)
@@ -963,6 +1009,12 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_NAV_LABELS = "nav_labels"
 		const val KEY_NAV_PINNED = "nav_pinned"
 		const val KEY_FLOATING_NAV = "floating_nav"
+		const val KEY_LIQUID_GLASS = "liquid_glass"
+		const val KEY_NEW_CHAPTERS_CATEGORIES = "new_chapters_categories"
+		const val KEY_ANILIST_SYNC_ENABLED = "anilist_sync_enabled"
+		const val KEY_ANILIST_LAST_SYNC_TIME = "anilist_last_sync_time"
+		const val KEY_ANILIST_LAST_SYNC_REMOTE_UPDATED_AT = "anilist_last_sync_remote_updated_at"
+		const val KEY_TRACKING_COUNTER_VERSION = "tracking_counter_version"
 		const val KEY_MAIN_FAB = "main_fab"
 		const val KEY_32BIT_COLOR = "enhanced_colors"
 		const val KEY_SOURCES_ORDER = "sources_sort_order"

@@ -21,10 +21,16 @@ import org.koitharu.kotatsu.details.domain.ProgressUpdateUseCase
 import org.koitharu.kotatsu.list.domain.ListFilterOption
 import org.koitharu.kotatsu.parsers.config.ConfigKey
 import org.koitharu.kotatsu.parsers.model.Manga
+import org.koitharu.kotatsu.parsers.model.MangaChapter
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.ifZero
+import org.koitharu.kotatsu.core.db.entity.toMangaChapters
+import org.koitharu.kotatsu.history.data.toMangaHistory
+import org.koitharu.kotatsu.tracker.data.MangaWithAnchor
 import org.koitharu.kotatsu.tracker.data.TrackEntity
 import org.koitharu.kotatsu.tracker.data.TrackLogEntity
+import org.koitharu.kotatsu.tracker.data.TrackingAnchorEntity
+import org.koitharu.kotatsu.tracker.data.toTrackingAnchor
 import org.koitharu.kotatsu.tracker.data.toTrackingLogItem
 import org.koitharu.kotatsu.tracker.domain.model.MangaTracking
 import org.koitharu.kotatsu.tracker.domain.model.MangaUpdates
@@ -48,6 +54,12 @@ class TrackingRepository @Inject constructor(
 	private var isGcCalled = AtomicBoolean(false)
 
 	suspend fun getNewChaptersCount(mangaId: Long): Int {
+		if (settings.isLiquidGlass) {
+			val anchor = db.getTrackingAnchorsDao().find(mangaId)
+			if (anchor != null) {
+				return anchor.newReleasesCount
+			}
+		}
 		return db.getTracksDao().findNewChapters(mangaId)
 	}
 
@@ -244,17 +256,40 @@ class TrackingRepository @Inject constructor(
 
 	suspend fun saveUpdates(updates: MangaUpdates) {
 		db.withTransaction {
-			val track = getOrCreateTrack(updates.manga.id).mergeWith(updates)
-			db.getTracksDao().upsert(track)
-			if (updates is MangaUpdates.Success && updates.isValid && updates.newChapters.isNotEmpty()) {
-				progressUpdateUseCase(updates.manga)
-				val logEntity = TrackLogEntity(
+			if (settings.isLiquidGlass) {
+				applyTrackingResult(
 					mangaId = updates.manga.id,
-					chapters = updates.newChapters.joinToString("\n") { x -> x.name },
-					createdAt = System.currentTimeMillis(),
-					isUnread = true,
+					preferredBranch = (updates as? MangaUpdates.Success)?.branch,
+					status = when (updates) {
+						is MangaUpdates.Failure -> TrackingAnchorEntity.STATUS_FAILED
+						is MangaUpdates.Success -> TrackingAnchorEntity.STATUS_OK
+					},
+					failCountDelta = if (updates is MangaUpdates.Failure) 1 else 0,
+					resetFailCount = updates is MangaUpdates.Success,
 				)
-				db.getTrackLogsDao().insert(logEntity)
+				if (updates is MangaUpdates.Success && updates.isValid && updates.newChapters.isNotEmpty()) {
+					progressUpdateUseCase(updates.manga)
+					val logEntity = TrackLogEntity(
+						mangaId = updates.manga.id,
+						chapters = updates.newChapters.joinToString("\n") { x -> x.name },
+						createdAt = System.currentTimeMillis(),
+						isUnread = true,
+					)
+					db.getTrackLogsDao().insert(logEntity)
+				}
+			} else {
+				val track = getOrCreateTrack(updates.manga.id).mergeWith(updates)
+				db.getTracksDao().upsert(track)
+				if (updates is MangaUpdates.Success && updates.isValid && updates.newChapters.isNotEmpty()) {
+					progressUpdateUseCase(updates.manga)
+					val logEntity = TrackLogEntity(
+						mangaId = updates.manga.id,
+						chapters = updates.newChapters.joinToString("\n") { x -> x.name },
+						createdAt = System.currentTimeMillis(),
+						isUnread = true,
+					)
+					db.getTrackLogsDao().insert(logEntity)
+				}
 			}
 		}
 	}
@@ -268,6 +303,277 @@ class TrackingRepository @Inject constructor(
 					db.getTracksDao().clearCounter(id)
 				}
 			}
+		}
+	}
+
+	val isLiquidGlass: Boolean
+		get() = settings.isLiquidGlass
+
+	suspend fun applyTrackingResult(
+		mangaId: Long,
+		preferredBranch: String? = null,
+		isForwardRead: Boolean = false,
+		isImport: Boolean = false,
+		status: Int = TrackingAnchorEntity.STATUS_OK,
+		lastCheckedAt: Long = System.currentTimeMillis(),
+		failCountDelta: Int = 0,
+		resetFailCount: Boolean = false,
+	): NewChaptersResult? = db.withTransaction {
+		val historyEntity = db.getHistoryDao().find(mangaId)
+		val history = historyEntity?.toMangaHistory()
+		val chapterEntities = db.getChaptersDao().findAll(mangaId)
+		if (chapterEntities.isEmpty()) {
+			return@withTransaction null
+		}
+		val cachedChapters = chapterEntities.toMangaChapters()
+
+		val existingAnchorEntity = db.getTrackingAnchorsDao().find(mangaId)
+		val targetBranch = preferredBranch
+			?: existingAnchorEntity?.branch
+			?: history?.chapterId?.let { id -> cachedChapters.find { it.id == id }?.branch }
+			?: "default"
+
+		val branchChapters = cachedChapters.filter { it.branch == targetBranch || it.branch == null }
+		val latestBranchChapter = branchChapters.lastOrNull() ?: cachedChapters.lastOrNull()
+
+		val existingTrack = db.getTracksDao().find(mangaId)
+		val hasExistingTrackUpdates = existingTrack != null && existingTrack.newChapters > 0 && !isImport
+
+		// When no anchor row exists yet (first check, upgrade from v28, restore from backup, or import):
+		// snapshot is initialized to latest chapter of the source,
+		// so nobody gets flooded with old backlog as "new releases".
+		// Exception: if the existing tracker already recorded new chapters, preserve them!
+		val anchorForComputation = if (existingAnchorEntity == null) {
+			TrackingAnchor(
+				lastChapterId = latestBranchChapter?.id ?: 0L,
+				baselineVolume = latestBranchChapter?.volume,
+				baselineNumber = latestBranchChapter?.number,
+				latestVolumeAtLastRead = if (hasExistingTrackUpdates) null else latestBranchChapter?.volume,
+				latestNumberAtLastRead = if (hasExistingTrackUpdates) null else latestBranchChapter?.number,
+				branch = targetBranch,
+			)
+		} else {
+			existingAnchorEntity.toTrackingAnchor()
+		}
+
+		val result = ChapterCounter.computeNewChapters(
+			chapters = cachedChapters,
+			history = history,
+			anchor = anchorForComputation,
+			preferredBranch = targetBranch,
+		)
+
+		val currentReadChapter = history?.chapterId?.let { id -> cachedChapters.find { it.id == id } }
+		val currentReadNum = currentReadChapter?.number ?: 0f
+		val currentReadVol = currentReadChapter?.volume ?: 0
+		val prevReadNum = existingAnchorEntity?.lastReadNumber ?: 0f
+		val prevReadVol = existingAnchorEntity?.lastReadVolume ?: 0
+
+		val isActuallyAdvancing = isForwardRead && (
+			currentReadVol > prevReadVol || (currentReadVol == prevReadVol && currentReadNum > prevReadNum)
+		)
+
+		val newSnapshotVol: Int?
+		val newSnapshotNum: Float?
+
+		when {
+			isImport -> {
+				newSnapshotVol = latestBranchChapter?.volume ?: 0
+				newSnapshotNum = latestBranchChapter?.number ?: 0f
+			}
+			isActuallyAdvancing -> {
+				newSnapshotVol = latestBranchChapter?.volume ?: existingAnchorEntity?.latestVolumeAtLastRead
+				newSnapshotNum = latestBranchChapter?.number ?: existingAnchorEntity?.latestNumberAtLastRead
+			}
+			existingAnchorEntity != null -> {
+				newSnapshotVol = existingAnchorEntity.latestVolumeAtLastRead
+				newSnapshotNum = existingAnchorEntity.latestNumberAtLastRead
+			}
+			hasExistingTrackUpdates -> {
+				newSnapshotVol = result.baselineToPersist?.latestVolumeAtLastRead
+				newSnapshotNum = result.baselineToPersist?.latestNumberAtLastRead
+			}
+			else -> {
+				newSnapshotVol = result.baselineToPersist?.latestVolumeAtLastRead ?: latestBranchChapter?.volume
+				newSnapshotNum = result.baselineToPersist?.latestNumberAtLastRead ?: latestBranchChapter?.number
+			}
+		}
+
+		val finalNewReleasesCount = when {
+			isActuallyAdvancing -> 0
+			isImport -> 0
+			result.count == 0 -> 0
+			existingAnchorEntity == null && hasExistingTrackUpdates -> {
+				minOf(result.count, existingTrack.newChapters)
+			}
+			else -> result.newReleasesCount
+		}
+
+		val newDetectedAt = when {
+			finalNewReleasesCount == 0 -> 0L
+			finalNewReleasesCount > (existingAnchorEntity?.newReleasesCount ?: 0) -> System.currentTimeMillis()
+			else -> existingAnchorEntity?.newDetectedAt ?: System.currentTimeMillis()
+		}
+
+		val newFailCount = when {
+			resetFailCount -> 0
+			else -> ((existingAnchorEntity?.failCount ?: 0) + failCountDelta).coerceAtLeast(0)
+		}
+
+		val updatedAnchor = TrackingAnchorEntity(
+			mangaId = mangaId,
+			lastReadVolume = if (history != null) {
+				if (history.page > 0 || history.scroll > 0 || history.percent >= 1f) {
+					currentReadVol
+				} else {
+					existingAnchorEntity?.lastReadVolume ?: currentReadVol
+				}
+			} else {
+				null
+			},
+			lastReadNumber = if (history != null) {
+				if (history.page > 0 || history.scroll > 0 || history.percent >= 1f) {
+					currentReadNum
+				} else {
+					existingAnchorEntity?.lastReadNumber ?: (currentReadNum - 1f).coerceAtLeast(0f)
+				}
+			} else {
+				null
+			},
+			latestVolumeAtLastRead = newSnapshotVol,
+			latestNumberAtLastRead = newSnapshotNum,
+			baselineVolume = result.baselineToPersist?.baselineVolume ?: existingAnchorEntity?.baselineVolume,
+			baselineNumber = result.baselineToPersist?.baselineNumber ?: existingAnchorEntity?.baselineNumber,
+			branch = targetBranch,
+			newReleasesCount = finalNewReleasesCount,
+			newDetectedAt = newDetectedAt,
+			lastCheckedAt = lastCheckedAt,
+			status = status,
+			failCount = newFailCount,
+			pendingShrinkCount = existingAnchorEntity?.pendingShrinkCount,
+			pendingShrinkHash = existingAnchorEntity?.pendingShrinkHash,
+		)
+		db.getTrackingAnchorsDao().upsert(updatedAnchor)
+
+		if (settings.isLiquidGlass) {
+			val existingTrack = db.getTracksDao().find(mangaId) ?: TrackEntity.create(mangaId)
+			val latestCh = result.latestChapter ?: latestBranchChapter
+			val updatedTrack = existingTrack.copy(
+				newChapters = result.count,
+				lastChapterId = latestCh?.id ?: existingTrack.lastChapterId,
+				lastChapterDate = latestCh?.uploadDate?.ifZero { existingTrack.lastChapterDate } ?: existingTrack.lastChapterDate,
+				lastCheckTime = lastCheckedAt,
+				lastResult = when {
+					status == TrackingAnchorEntity.STATUS_FAILED -> TrackEntity.RESULT_FAILED
+					result.count > 0 -> TrackEntity.RESULT_HAS_UPDATE
+					else -> TrackEntity.RESULT_NO_UPDATE
+				},
+				lastError = if (status == TrackingAnchorEntity.STATUS_FAILED) existingTrack.lastError else null,
+			)
+			db.getTracksDao().upsert(updatedTrack)
+		}
+
+		result
+	}
+
+	suspend fun resetTrackingAnchorOnHistoryDeleted(mangaId: Long) = db.withTransaction {
+		val latest = db.getChaptersDao().findAll(mangaId).lastOrNull()
+		val existing = db.getTrackingAnchorsDao().find(mangaId)
+		val targetBranch = existing?.branch ?: "default"
+		val anchor = TrackingAnchorEntity.create(mangaId, targetBranch).copy(
+			baselineVolume = latest?.volume ?: 0,
+			baselineNumber = latest?.number ?: 0f,
+			latestVolumeAtLastRead = latest?.volume ?: 0,
+			latestNumberAtLastRead = latest?.number ?: 0f,
+			newReleasesCount = 0,
+			newDetectedAt = 0L,
+		)
+		db.getTrackingAnchorsDao().upsert(anchor)
+		if (settings.isLiquidGlass) {
+			db.getTracksDao().clearCounter(mangaId)
+		}
+	}
+
+	suspend fun resetTrackingAnchorsOnHistoryDeleted(ids: Collection<Long>) = db.withTransaction {
+		for (id in ids) {
+			resetTrackingAnchorOnHistoryDeleted(id)
+		}
+	}
+
+	suspend fun resetAllTrackingAnchorsOnHistoryCleared() = db.withTransaction {
+		val allAnchorIds = db.getTrackingAnchorsDao().findAllIds()
+		for (id in allAnchorIds) {
+			resetTrackingAnchorOnHistoryDeleted(id)
+		}
+	}
+
+	suspend fun dismissNewReleases(mangaId: Long, volume: Int?, number: Float?) = db.withTransaction {
+		db.getTrackingAnchorsDao().dismissUntil(mangaId, volume, number)
+		if (settings.isLiquidGlass) {
+			db.getTracksDao().clearCounter(mangaId)
+		}
+	}
+
+	suspend fun muteManga(mangaId: Long) {
+		db.getTrackingAnchorsDao().mute(mangaId)
+	}
+
+	suspend fun unmuteManga(mangaId: Long) {
+		db.getTrackingAnchorsDao().unmute(mangaId)
+	}
+
+	suspend fun getCachedChapters(mangaId: Long): List<MangaChapter> {
+		return db.getChaptersDao().findAll(mangaId).toMangaChapters()
+	}
+
+	suspend fun getAnchor(mangaId: Long): TrackingAnchorEntity? {
+		return db.getTrackingAnchorsDao().find(mangaId)
+	}
+
+	suspend fun updatePendingShrink(mangaId: Long, count: Int, hash: Long) {
+		db.getTrackingAnchorsDao().updatePendingShrink(mangaId, count, hash)
+	}
+
+	suspend fun clearPendingShrink(mangaId: Long) {
+		db.getTrackingAnchorsDao().clearPendingShrink(mangaId)
+	}
+
+	fun observeNewChaptersRail(
+		categoryIds: Collection<Long>?,
+		includeNsfw: Boolean,
+		limit: Int = 20,
+	): Flow<List<MangaWithAnchor>> {
+		return db.getTrackingAnchorsDao().observeRailManga(categoryIds, includeNsfw, limit)
+	}
+
+	suspend fun syncTracksToAnchors() = db.withTransaction {
+		val dao = db.getTrackingAnchorsDao()
+		dao.insertMissingFromTracks()
+		dao.updateZeroedFromTracks()
+		recomputeStaleCountersIfNeeded()
+	}
+
+	private suspend fun recomputeStaleCountersIfNeeded() {
+		if (settings.trackingCounterVersion >= CURRENT_COUNTER_VERSION) return
+		val anchorsWithUpdates = db.getTrackingAnchorsDao().findAllWithNewReleases()
+		for (anchor in anchorsWithUpdates) {
+			val chapters = db.getChaptersDao().findAll(anchor.mangaId)
+			if (chapters.isNotEmpty()) {
+				applyTrackingResult(
+					mangaId = anchor.mangaId,
+					preferredBranch = anchor.branch,
+				)
+			}
+		}
+		settings.trackingCounterVersion = CURRENT_COUNTER_VERSION
+	}
+
+	suspend fun onLiquidGlassToggled(enabled: Boolean) = db.withTransaction {
+		if (!enabled) {
+			db.getTracksDao().clearCounters()
+			db.getTrackingAnchorsDao().clear()
+		} else {
+			syncTracksToAnchors()
 		}
 	}
 
@@ -327,6 +633,9 @@ class TrackingRepository @Inject constructor(
 		for (mangaId in ids) {
 			dao.delete(mangaId)
 		}
+		val anchorsDao = db.getTrackingAnchorsDao()
+		anchorsDao.insertMissingFromTracks()
+		anchorsDao.updateZeroedFromTracks()
 		if (addedFromHistory != 0 || addedFromFavourites != 0 || ids.isNotEmpty()) {
 			Log.i(
 				TAG,
@@ -385,6 +694,7 @@ class TrackingRepository @Inject constructor(
 	private companion object {
 
 		const val TAG = "Tracker"
+		const val CURRENT_COUNTER_VERSION = 1
 		const val MAX_STALE_UPDATE_DAYS = 90L
 		const val REMOVED_IDS_LOG_LIMIT = 20
 

@@ -71,6 +71,11 @@ abstract class BaseActivity<B : ViewBinding> :
 			if (isAmoledTheme) {
 				setTheme(R.style.ThemeOverlay_Kotatsu_Amoled)
 			}
+			val isNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+			if (settings.isLiquidGlass) {
+				setTheme(if (isNight) R.style.ThemeOverlay_Kotatsu_LiquidGlass else R.style.ThemeOverlay_Kotatsu_LiquidGlass_Light)
+				window.setBackgroundDrawable(org.koitharu.kotatsu.core.ui.glass.LivingWallpaperDrawable.createNebula(isNight))
+			}
 		}
 		putDataToExtras(intent)
 		exceptionResolver = entryPoint.exceptionResolverFactory.create(this)

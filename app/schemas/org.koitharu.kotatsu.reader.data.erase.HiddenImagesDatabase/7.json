@@ -1,0 +1,260 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "56711ffdbf1013ce3172e9ac6447798b",
+    "entities": [
+      {
+        "tableName": "hidden_images",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `hash_horizontal` INTEGER NOT NULL, `hash_vertical` INTEGER NOT NULL, `mean` INTEGER NOT NULL, `aspect` REAL NOT NULL, `x_start` REAL NOT NULL, `x_end` REAL NOT NULL, `created_at` INTEGER NOT NULL, `manga_title` TEXT, `thumbnail` BLOB, `signature` BLOB, `page_id` INTEGER, `y_start` REAL, `pad_top` REAL, `pad_bottom` REAL, `parent_id` INTEGER, `removes_rows` INTEGER, `colour` BLOB, `keypoints` BLOB)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hashHorizontal",
+            "columnName": "hash_horizontal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hashVertical",
+            "columnName": "hash_vertical",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mean",
+            "columnName": "mean",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aspect",
+            "columnName": "aspect",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xStart",
+            "columnName": "x_start",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xEnd",
+            "columnName": "x_end",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mangaTitle",
+            "columnName": "manga_title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "thumbnail",
+            "columnName": "thumbnail",
+            "affinity": "BLOB"
+          },
+          {
+            "fieldPath": "signature",
+            "columnName": "signature",
+            "affinity": "BLOB"
+          },
+          {
+            "fieldPath": "pageId",
+            "columnName": "page_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "yStart",
+            "columnName": "y_start",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "padTop",
+            "columnName": "pad_top",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "padBottom",
+            "columnName": "pad_bottom",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "parentId",
+            "columnName": "parent_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "removesRows",
+            "columnName": "removes_rows",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "colour",
+            "columnName": "colour",
+            "affinity": "BLOB"
+          },
+          {
+            "fieldPath": "keypoints",
+            "columnName": "keypoints",
+            "affinity": "BLOB"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "hidden_pages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`page_id` INTEGER NOT NULL, `image_id` INTEGER NOT NULL, PRIMARY KEY(`page_id`), FOREIGN KEY(`image_id`) REFERENCES `hidden_images`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "pageId",
+            "columnName": "page_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageId",
+            "columnName": "image_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "page_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_hidden_pages_image_id",
+            "unique": false,
+            "columnNames": [
+              "image_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_hidden_pages_image_id` ON `${TABLE_NAME}` (`image_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "hidden_images",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "image_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "page_scans",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`page_id` INTEGER NOT NULL, `newest_rule_id` INTEGER NOT NULL, `rule_ids` TEXT NOT NULL, `is_hidden` INTEGER NOT NULL, `source_width` INTEGER NOT NULL, `source_height` INTEGER NOT NULL, `bands` TEXT NOT NULL, `patches` TEXT NOT NULL, `scanned_at` INTEGER NOT NULL, `matcher_version` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`page_id`))",
+        "fields": [
+          {
+            "fieldPath": "pageId",
+            "columnName": "page_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "newestRuleId",
+            "columnName": "newest_rule_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ruleIds",
+            "columnName": "rule_ids",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isHidden",
+            "columnName": "is_hidden",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceWidth",
+            "columnName": "source_width",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceHeight",
+            "columnName": "source_height",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bands",
+            "columnName": "bands",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "patches",
+            "columnName": "patches",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scannedAt",
+            "columnName": "scanned_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matcherVersion",
+            "columnName": "matcher_version",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "page_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_page_scans_scanned_at",
+            "unique": false,
+            "columnNames": [
+              "scanned_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_page_scans_scanned_at` ON `${TABLE_NAME}` (`scanned_at`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '56711ffdbf1013ce3172e9ac6447798b')"
+    ]
+  }
+}

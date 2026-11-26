@@ -83,11 +83,13 @@ abstract class HistoryDao : MangaQueryBuilder.ConditionCallback {
 		filterOptions: Set<ListFilterOption>,
 		limit: Int,
 		searchQuery: String = "",
+		maxPercent: Float? = null,
 	): Flow<List<HistoryWithManga>> = observeAllImpl(
 		MangaQueryBuilder(TABLE_HISTORY, this)
 			.join("LEFT JOIN manga ON history.manga_id = manga.manga_id")
 			.where("history.deleted_at = 0")
 			.let { if (searchQuery.isEmpty()) it else it.where(searchCondition(searchQuery)) }
+			.let { if (maxPercent != null) it.where("history.percent < $maxPercent") else it }
 			.filters(filterOptions)
 			.orderBy(
 				orderBy = when (order) {

@@ -55,8 +55,16 @@ abstract class BasePreferenceFragment(@StringRes private val titleId: Int) :
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
 		ViewCompat.setOnApplyWindowInsetsListener(view, this)
-		val themedContext = (view.parentView ?: view).context
-		view.setBackgroundColor(themedContext.getThemeColor(android.R.attr.colorBackground))
+		if (settings.isLiquidGlass) {
+			setDivider(null)
+			setDividerHeight(0)
+			view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+			listView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+			listView.addItemDecoration(org.koitharu.kotatsu.core.ui.glass.GlassPreferenceGroupDecoration(requireContext()))
+		} else {
+			val themedContext = (view.parentView ?: view).context
+			view.setBackgroundColor(themedContext.getThemeColor(android.R.attr.colorBackground))
+		}
 		listView.clipToPadding = false
 	}
 

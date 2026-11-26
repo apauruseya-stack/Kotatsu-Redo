@@ -25,6 +25,7 @@ import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsStateFlow
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.ui.util.ReversibleAction
+import org.koitharu.kotatsu.core.ui.widgets.ChipsView
 import org.koitharu.kotatsu.core.util.LocaleStringComparator
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
@@ -33,6 +34,8 @@ import org.koitharu.kotatsu.core.util.ext.requireValue
 import org.koitharu.kotatsu.core.util.ext.sortedWithSafe
 import org.koitharu.kotatsu.details.data.MangaDetails
 import org.koitharu.kotatsu.details.domain.DetailsInteractor
+import org.koitharu.kotatsu.details.domain.ScanlatorChapterMerger
+import org.koitharu.kotatsu.details.domain.ScanlatorPriorities
 import org.koitharu.kotatsu.details.ui.DetailsActivity
 import org.koitharu.kotatsu.details.ui.DetailsViewModel
 import org.koitharu.kotatsu.details.ui.mapChapters
@@ -50,7 +53,7 @@ import org.koitharu.kotatsu.reader.ui.ReaderState
 import org.koitharu.kotatsu.reader.ui.ReaderViewModel
 
 abstract class ChaptersPagesViewModel(
-	@JvmField protected val settings: AppSettings,
+	@JvmField val settings: AppSettings,
 	@JvmField protected val interactor: DetailsInteractor,
 	private val bookmarksRepository: BookmarksRepository,
 	private val historyRepository: HistoryRepository,
@@ -65,9 +68,12 @@ abstract class ChaptersPagesViewModel(
 	val onActionDone = MutableEventFlow<ReversibleAction>()
 	val onDownloadStarted = MutableEventFlow<Unit>()
 	val onMangaRemoved = MutableEventFlow<Manga>()
+	val scanlatorPromptEvent = MutableEventFlow<ScanlatorPromptData>()
 
 	private val chaptersQuery = MutableStateFlow("")
 	val selectedBranch = MutableStateFlow<String?>(null)
+	val selectedScanlator = MutableStateFlow<String?>(null)
+	val preferredScanlator = MutableStateFlow<String?>(null)
 
 	val manga = mangaDetails.map { x -> x?.toManga() }
 		.withErrorHandling()
@@ -121,23 +127,41 @@ abstract class ChaptersPagesViewModel(
 		}
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Lazily, emptyList())
 
+	private data class ChapterFilterParams(
+		val branch: String?,
+		val selectedScanlator: String?,
+		val preferredScanlator: String?,
+		val isDownloadedOnly: Boolean,
+		val isGrid: Boolean,
+	)
+
+	private val chapterFilterParams = combine(
+		selectedBranch,
+		selectedScanlator,
+		preferredScanlator,
+		isDownloadedOnly,
+		isChaptersInGridView,
+	) { branch, scanlator, preferred, downloadedOnly, grid ->
+		ChapterFilterParams(branch, scanlator, preferred, downloadedOnly, grid)
+	}
+
 	val chapters = combine(
 		combine(
 			mangaDetails,
 			readingState.map { it?.chapterId ?: 0L }.distinctUntilChanged(),
-			selectedBranch,
 			newChaptersCount,
 			bookmarks,
-			isChaptersInGridView,
-			isDownloadedOnly,
-		) { manga, currentChapterId, branch, news, bookmarks, grid, downloadedOnly ->
+			chapterFilterParams,
+		) { manga, currentChapterId, news, bookmarks, filter ->
 			manga?.mapChapters(
 				currentChapterId = currentChapterId,
 				newCount = news,
-				branch = branch,
+				branch = filter.branch,
 				bookmarks = bookmarks,
-				isGrid = grid,
-				isDownloadedOnly = downloadedOnly,
+				isGrid = filter.isGrid,
+				isDownloadedOnly = filter.isDownloadedOnly,
+				selectedScanlator = filter.selectedScanlator,
+				preferredScanlator = filter.preferredScanlator,
 			).orEmpty()
 		},
 		isChaptersReversed,
@@ -149,17 +173,102 @@ abstract class ChaptersPagesViewModel(
 	val quickFilter = combine(
 		mangaDetails,
 		selectedBranch,
-	) { details, branch ->
+		selectedScanlator,
+		preferredScanlator,
+	) { details, branch, currentScanlator, preferred ->
+		val result = ArrayList<ChipsView.ChipModel>()
 		val branches = details?.chapters?.toList()?.sortedWithSafe(
 			compareBy(LocaleStringComparator()) { it.first },
 		).orEmpty()
 		if (branches.size > 1) {
-			branches.map {
+			branches.mapTo(result) {
 				val option = ListFilterOption.Branch(titleText = it.first, chaptersCount = it.second.size)
 				option.toChipModel(isChecked = it.first == branch)
 			}
-		} else {
-			emptyList()
+		}
+
+		val rawBranchChapters = details?.chapters?.get(branch)
+			?: details?.allChapters.orEmpty()
+		val distinctScanlators = rawBranchChapters.mapNotNull { it.scanlator?.trim() }
+			.filter { it.isNotBlank() }
+			.distinct()
+
+		if (distinctScanlators.size > 1) {
+			val effectivePreferred = preferred
+				?: ScanlatorPriorities.pickBestDefault(distinctScanlators, rawBranchChapters)
+				?: distinctScanlators.first()
+
+			val mergedAllCount = ScanlatorChapterMerger.mergeChapters(
+				chapters = rawBranchChapters,
+				selectedScanlator = null,
+				preferredScanlator = effectivePreferred,
+			).size
+
+			val isAllSelected = currentScanlator.isNullOrEmpty() || currentScanlator.equals("ALL", ignoreCase = true)
+			val allOption = ListFilterOption.Scanlator(
+				titleText = null,
+				chaptersCount = mergedAllCount,
+				isAll = true,
+			)
+			result.add(allOption.toChipModel(isChecked = isAllSelected))
+
+			val scanlatorCounts = rawBranchChapters.groupingBy { it.scanlator?.trim().orEmpty() }.eachCount()
+
+			val sortedScanlators = distinctScanlators.sortedWith(
+				compareBy<String> {
+					if (it.equals(effectivePreferred, ignoreCase = true)) 0 else 1
+				}.thenBy {
+					ScanlatorPriorities.getPriority(it)
+				}.thenByDescending {
+					scanlatorCounts[it] ?: 0
+				}.thenBy(LocaleStringComparator()) { it }
+			)
+
+			for (s in sortedScanlators) {
+				val isSelected = !isAllSelected && currentScanlator.equals(s, ignoreCase = true)
+				val option = ListFilterOption.Scanlator(
+					titleText = s,
+					chaptersCount = scanlatorCounts[s] ?: 0,
+					isAll = false,
+				)
+				result.add(option.toChipModel(isChecked = isSelected))
+			}
+		}
+
+		result
+	}
+
+	private var hasPromptedScanlators = false
+
+	private fun checkAndPromptScanlators(details: MangaDetails) {
+		val distinctScanlators = details.allChapters.mapNotNull { it.scanlator?.trim() }
+			.filter { it.isNotBlank() }
+			.distinct()
+		if (distinctScanlators.size <= 1) return
+
+		val mangaId = details.id
+		if (settings.hasPreferredScanlator(mangaId)) {
+			preferredScanlator.value = settings.getPreferredScanlator(mangaId)
+			return
+		}
+
+		val bestDefault = ScanlatorPriorities.pickBestDefault(distinctScanlators, details.allChapters)
+			?: distinctScanlators.first()
+		preferredScanlator.value = bestDefault
+
+		if (!hasPromptedScanlators) {
+			hasPromptedScanlators = true
+			val sortedScanlators = distinctScanlators.sortedWith(
+				compareBy<String> { ScanlatorPriorities.getPriority(it) }
+					.thenBy(LocaleStringComparator()) { it }
+			)
+			scanlatorPromptEvent.call(
+				ScanlatorPromptData(
+					mangaId = mangaId,
+					scanlators = sortedScanlators,
+					defaultSelection = bestDefault,
+				)
+			)
 		}
 	}
 
@@ -168,6 +277,38 @@ abstract class ChaptersPagesViewModel(
 			localStorageChanges
 				.collect { onDownloadComplete(it) }
 		}
+		launchJob(Dispatchers.Default) {
+			mangaDetails.collect { details ->
+				if (details != null && details.allChapters.isNotEmpty()) {
+					checkAndPromptScanlators(details)
+				}
+			}
+		}
+	}
+
+	fun requestScanlatorSelection() {
+		val details = mangaDetails.value ?: return
+		val distinctScanlators = details.allChapters.mapNotNull { it.scanlator?.trim() }
+			.filter { it.isNotBlank() }
+			.distinct()
+		if (distinctScanlators.size <= 1) return
+
+		val currentPreferred = preferredScanlator.value
+			?: ScanlatorPriorities.pickBestDefault(distinctScanlators, details.allChapters)
+			?: distinctScanlators.first()
+
+		val sortedScanlators = distinctScanlators.sortedWith(
+			compareBy<String> { ScanlatorPriorities.getPriority(it) }
+				.thenBy(LocaleStringComparator()) { it }
+		)
+
+		scanlatorPromptEvent.call(
+			ScanlatorPromptData(
+				mangaId = details.id,
+				scanlators = sortedScanlators,
+				defaultSelection = currentPreferred,
+			)
+		)
 	}
 
 	fun setChaptersReversed(newValue: Boolean) {
@@ -180,7 +321,24 @@ abstract class ChaptersPagesViewModel(
 
 	fun setSelectedBranch(branch: String?) {
 		selectedBranch.value = branch
+		selectedScanlator.value = null
 	}
+
+	fun setSelectedScanlator(scanlator: String?) {
+		selectedScanlator.value = scanlator
+	}
+
+	fun setPreferredScanlator(scanlator: String?) {
+		preferredScanlator.value = scanlator
+		val mangaId = mangaDetails.value?.id ?: return
+		settings.setPreferredScanlator(mangaId, scanlator)
+	}
+
+	data class ScanlatorPromptData(
+		val mangaId: Long,
+		val scanlators: List<String>,
+		val defaultSelection: String,
+	)
 
 	fun performChapterSearch(query: String?) {
 		chaptersQuery.value = query?.trim().orEmpty()

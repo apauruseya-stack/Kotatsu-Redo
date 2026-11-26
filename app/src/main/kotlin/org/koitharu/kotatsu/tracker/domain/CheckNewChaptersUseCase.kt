@@ -58,6 +58,16 @@ class CheckNewChaptersUseCase @Inject constructor(
 	suspend operator fun invoke(manga: Manga, currentChapterId: Long) = mutex.withLock(manga.id) {
 		runCatchingCancellable {
 			repository.updateTracks()
+			if (repository.isLiquidGlass) {
+				val details = getFullManga(manga)
+				val branch = details.chapters?.findById(currentChapterId)?.branch
+				repository.applyTrackingResult(
+					mangaId = manga.id,
+					preferredBranch = branch,
+					isForwardRead = true,
+				)
+				return@runCatchingCancellable
+			}
 			val details = getFullManga(manga)
 			val track = repository.getTrackOrNull(manga) ?: return@withLock
 			val branch = checkNotNull(details.chapters?.findById(currentChapterId)).branch
@@ -91,10 +101,49 @@ class CheckNewChaptersUseCase @Inject constructor(
 	}
 
 	private suspend fun invokeImpl(track: MangaTracking): MangaUpdates = runCatchingCancellable {
+		val cachedChapters = if (repository.isLiquidGlass) {
+			repository.getCachedChapters(track.manga.id)
+		} else {
+			emptyList()
+		}
 		val details = getFullManga(track.manga)
 		val history = historyRepository.getOne(track.manga)
 		val historyChapterId = history?.chapterId ?: 0L
 		val branch = getBranch(details, track.lastChapterId, historyChapterId)
+
+		if (repository.isLiquidGlass) {
+			val branchChapters = details.getChapters(branch).orEmpty()
+			val anchor = repository.getAnchor(track.manga.id)
+			val cachedCount = cachedChapters.size
+			val decision = ShrinkGuard.evaluate(
+				cachedCount = cachedCount,
+				newChapters = branchChapters,
+				pendingShrinkCount = anchor?.pendingShrinkCount,
+				pendingShrinkHash = anchor?.pendingShrinkHash,
+			)
+			when (decision) {
+				is ShrinkGuard.ShrinkDecision.RejectEmpty -> {
+					return@runCatchingCancellable MangaUpdates.Failure(
+						manga = track.manga,
+						error = IllegalStateException("Source returned empty chapter list for ${track.manga.title}"),
+					)
+				}
+				is ShrinkGuard.ShrinkDecision.PendingConfirmation -> {
+					repository.updatePendingShrink(track.manga.id, decision.newCount, decision.hash)
+					return@runCatchingCancellable MangaUpdates.Failure(
+						manga = track.manga,
+						error = IllegalStateException("Chapter count shrank from $cachedCount to ${decision.newCount}; awaiting confirmation"),
+					)
+				}
+				is ShrinkGuard.ShrinkDecision.ConfirmedShrink,
+				is ShrinkGuard.ShrinkDecision.AcceptNormal -> {
+					if (anchor?.pendingShrinkCount != null) {
+						repository.clearPendingShrink(track.manga.id)
+					}
+				}
+			}
+		}
+
 		val updates = compare(track, details, branch, historyChapterId)
 		if (updates.isValid && updates.newChapters.isNotEmpty()) {
 			updates.filterReadAndStaleChapters(

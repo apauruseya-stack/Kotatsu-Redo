@@ -134,8 +134,16 @@ class ChaptersFragment :
 	}
 
 	override fun onChipClick(chip: Chip, data: Any?) {
-		if (data !is ListFilterOption.Branch) return
-		viewModel.setSelectedBranch(data.titleText)
+		when (data) {
+			is ListFilterOption.Branch -> viewModel.setSelectedBranch(data.titleText)
+			is ListFilterOption.Scanlator -> {
+				if (data.isAll) {
+					viewModel.setSelectedScanlator(null)
+				} else {
+					viewModel.setSelectedScanlator(data.titleText)
+				}
+			}
+		}
 	}
 
 	override fun onApplyWindowInsets(

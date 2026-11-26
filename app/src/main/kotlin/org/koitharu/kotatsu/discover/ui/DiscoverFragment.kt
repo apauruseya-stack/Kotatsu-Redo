@@ -212,7 +212,7 @@ class DiscoverFragment :
 		)
 		val listAdapter = BaseListAdapter<ListModel>()
 			.addDelegate(ListItemType.DISCOVER_RANKED, discoverRankedAD({ router.openDetails(it) }, ::offerDismiss, ::dismissWithUndo))
-			.addDelegate(ListItemType.DISCOVER_ROW, discoverRowAD(rowSize, coverPool, { router.openSuggestions() }, this) { item, _ -> dismissWithUndo(item.manga) })
+			.addDelegate(ListItemType.DISCOVER_ROW, discoverRowAD(rowSize, coverPool, { router.openSuggestions() }, { router.openFeed() }, this) { item, _ -> dismissWithUndo(item.manga) })
 			.addDelegate(ListItemType.FOOTER_LOADING, discoverPlaceholderAD())
 			.addDelegate(ListItemType.MANGA_GRID, mangaGridItemAD(gridSize, this) { item, _ -> dismissWithUndo(item.manga) })
 			.addDelegate(ListItemType.HEADER, listHeaderAD(null))
@@ -302,6 +302,11 @@ class DiscoverFragment :
 		override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when (menuItem.itemId) {
 			R.id.action_by_source -> {
 				startActivity(Intent(requireContext(), SourcesActivity::class.java))
+				true
+			}
+
+			R.id.action_feed -> {
+				router.openFeed()
 				true
 			}
 

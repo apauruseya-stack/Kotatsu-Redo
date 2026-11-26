@@ -22,7 +22,9 @@ import org.koitharu.kotatsu.core.model.getLocalizedTitle
 import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.core.model.isNsfw
 import org.koitharu.kotatsu.core.nav.AppRouter
+import org.koitharu.kotatsu.core.nav.ReaderIntent
 import org.koitharu.kotatsu.core.prefs.AppSettings
+import org.koitharu.kotatsu.reader.ui.ReaderState
 import org.koitharu.kotatsu.core.util.ext.checkNotificationPermission
 import org.koitharu.kotatsu.core.util.ext.getQuantityStringSafe
 import org.koitharu.kotatsu.core.util.ext.mangaSourceExtra
@@ -86,7 +88,15 @@ class TrackerNotificationHelper @Inject constructor(
 			style.setSummaryText(manga.title)
 			style.setBigContentTitle(summary)
 			setStyle(style)
-			val intent = AppRouter.detailsIntent(applicationContext, manga)
+			val targetChapter = newChapters.firstOrNull()
+			val intent = if (settings.isLiquidGlass && targetChapter != null) {
+				ReaderIntent.Builder(applicationContext)
+					.manga(manga)
+					.state(ReaderState(chapterId = targetChapter.id, page = 0, scroll = 0))
+					.build().intent
+			} else {
+				AppRouter.detailsIntent(applicationContext, manga)
+			}
 			setContentIntent(
 				PendingIntentCompat.getActivity(
 					applicationContext,

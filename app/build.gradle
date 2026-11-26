@@ -112,6 +112,7 @@ android {
 			minifyEnabled true
 			shrinkResources true
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+			signingConfig = signingConfigs.debug
 		}
 		nightly {
 			initWith release
@@ -130,7 +131,10 @@ android {
 				'META-INF/NOTICE.md'
 			]
 		}
-	}
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
 	sourceSets {
 		androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
 		main.java.srcDirs += 'src/main/kotlin/'
@@ -156,9 +160,6 @@ android {
 			'-Xannotation-default-target=first-only',
 			'-Xtype-enhancement-improvements-strict-mode'
 		]
-	}
-	room {
-        schemaDirectory "$projectDir/schemas"
 	}
 	lint {
 		abortOnError true
@@ -222,6 +223,10 @@ sentry {
 	includeSourceContext = false
 }
 
+room {
+	schemaDirectory "$projectDir/schemas"
+}
+
 dependencies {
 	def parsersVersion = libs.versions.parsers.get()
 	if (System.properties.containsKey('parsersVersionOverride')) {
@@ -257,6 +262,8 @@ dependencies {
 	implementation libs.lifecycle.process
 	implementation libs.androidx.constraintlayout
 	implementation libs.androidx.documentfile
+	implementation libs.androidx.dynamicanimation
+	implementation libs.androidx.palette
 	implementation libs.androidx.swiperefreshlayout
 	implementation libs.androidx.recyclerview
 	implementation libs.androidx.viewpager2

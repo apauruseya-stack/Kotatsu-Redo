@@ -109,6 +109,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 	lateinit var sourceScoreSyncScheduler: SourceScoreSyncWorker.Scheduler
 
 	@Inject
+	lateinit var aniListSyncScheduler: org.koitharu.kotatsu.scrobbling.anilist.work.AniListSyncWorker.Scheduler
+
+	@Inject
 	lateinit var communityReplyNotifier: CommunityReplyNotifier
 
 	@Inject
@@ -176,6 +179,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		CommunityOnboardingDialog.showIfNeeded(this, communitySettings, supportFragmentManager)
 		// Idempotent, and reads the toggles - so it also cancels the job when the feature is off.
 		sourceScoreSyncScheduler.schedule()
+		aniListSyncScheduler.schedule()
 		// Polled while the app is open rather than pushed: push would mean a device token and a third
 		// party learning when this user opens a manga app, to save a request that costs nothing.
 		communityReplyNotifier.watchWhileOpen(this)

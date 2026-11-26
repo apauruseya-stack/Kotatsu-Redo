@@ -56,11 +56,16 @@ data class ReaderSettings(
 	)
 
 	fun applyBackground(view: View) {
-		view.background = background.resolve(view.context)
-		view.backgroundTintList = if (background.isLight(view.context)) {
-			colorFilter?.getBackgroundTint()
+		if (background == ReaderBackground.LIQUID_GLASS) {
+			view.background = null
+			view.backgroundTintList = null
 		} else {
-			null
+			view.background = background.resolve(view.context)
+			view.backgroundTintList = if (background.isLight(view.context)) {
+				colorFilter?.getBackgroundTint()
+			} else {
+				null
+			}
 		}
 	}
 

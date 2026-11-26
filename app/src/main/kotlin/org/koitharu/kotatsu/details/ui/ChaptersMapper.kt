@@ -17,8 +17,15 @@ fun MangaDetails.mapChapters(
 	bookmarks: List<Bookmark>,
 	isGrid: Boolean,
 	isDownloadedOnly: Boolean,
+	selectedScanlator: String? = null,
+	preferredScanlator: String? = null,
 ): List<ChapterListItem> {
-	val remoteChapters = chapters[branch].orEmpty()
+	val rawRemoteChapters = chapters[branch].orEmpty()
+	val remoteChapters = org.koitharu.kotatsu.details.domain.ScanlatorChapterMerger.mergeChapters(
+		chapters = rawRemoteChapters,
+		selectedScanlator = selectedScanlator,
+		preferredScanlator = preferredScanlator,
+	)
 	val localChapters = local?.manga?.getChapters(branch).orEmpty()
 	if (remoteChapters.isEmpty() && localChapters.isEmpty()) {
 		return emptyList()
@@ -36,14 +43,37 @@ fun MangaDetails.mapChapters(
 		null
 	}
 	var isUnread = currentChapterId !in ids
+	val effectiveCurrentChapterId = if (currentChapterId in ids) {
+		currentChapterId
+	} else if (currentChapterId != 0L) {
+		val historyChapter = allChapters.find { it.id == currentChapterId }
+		if (historyChapter != null) {
+			val branchChapters = if (remoteChapters.isNotEmpty()) remoteChapters else localChapters
+			if (historyChapter.number > 0f) {
+				branchChapters.firstOrNull { it.number == historyChapter.number }?.id
+					?: branchChapters.lastOrNull { it.number > 0f && it.number <= historyChapter.number }?.id
+			} else if (!historyChapter.title.isNullOrEmpty()) {
+				branchChapters.firstOrNull { it.title == historyChapter.title }?.id
+			} else {
+				null
+			}
+		} else {
+			null
+		}
+	} else {
+		null
+	}
+	if (effectiveCurrentChapterId != null && effectiveCurrentChapterId in ids) {
+		isUnread = false
+	}
 	if (!isDownloadedOnly || local?.manga?.chapters == null) {
 		for (chapter in remoteChapters) {
 			val local = localMap?.remove(chapter.id)
-			if (chapter.id == currentChapterId) {
+			if (chapter.id == effectiveCurrentChapterId) {
 				isUnread = true
 			}
 			result += (local ?: chapter).toListItem(
-				isCurrent = chapter.id == currentChapterId,
+				isCurrent = chapter.id == effectiveCurrentChapterId,
 				isUnread = isUnread,
 				isNew = isUnread && result.size >= newFrom,
 				isDownloaded = local != null,
@@ -54,11 +84,11 @@ fun MangaDetails.mapChapters(
 	}
 	if (!localMap.isNullOrEmpty()) {
 		for (chapter in localMap.values) {
-			if (chapter.id == currentChapterId) {
+			if (chapter.id == effectiveCurrentChapterId) {
 				isUnread = true
 			}
 			result += chapter.toListItem(
-				isCurrent = chapter.id == currentChapterId,
+				isCurrent = chapter.id == effectiveCurrentChapterId,
 				isUnread = isUnread,
 				isNew = false,
 				isDownloaded = !isLocal,

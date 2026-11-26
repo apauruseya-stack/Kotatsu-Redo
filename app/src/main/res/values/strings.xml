@@ -984,6 +984,7 @@ Optional — skip it and you appear as anon.</string>
     <string name="disable_captcha_auto_solve_summary">Don\'t try to solve CAPTCHA silently in the background. You will be asked to solve it manually instead.</string>
     <string name="chapter_volume_number">Vol %1$s Chapter %2$s</string>
     <string name="chapter_number">Chapter %s</string>
+    <string name="chapter_number_short">Ch. %s</string>
     <string name="unnamed_chapter">Unnamed chapter</string>
     <string name="search_disabled_sources">Search through disabled sources</string>
     <string name="error_details">Error details</string>
@@ -1235,6 +1236,10 @@ Optional — skip it and you appear as anon.</string>
 		<item quantity="one">%1$d regularly updated manga has had no new chapter for over 4 weeks</item>
 		<item quantity="other">%1$d regularly updated manga have had no new chapter for over 4 weeks</item>
 	</plurals>
+	<plurals name="nav_badge_new_items">
+		<item quantity="one">%1$d new item</item>
+		<item quantity="other">%1$d new items</item>
+	</plurals>
 	<string name="tracker_stale_text">The source may be down: %1$s</string>
 	<string name="tracker_stale_summary">The source may be down</string>
 	<string name="tracker_stale_line">%1$s (%2$s)</string>
@@ -1247,4 +1252,43 @@ Optional — skip it and you appear as anon.</string>
 	<string name="sources_version_downloaded">%1$s, updated since the app was installed</string>
 	<string name="sources_up_to_date">Manga sources are up to date</string>
 	<string name="sources_updated">Manga sources updated</string>
+	<string name="import_from_anilist">Import from AniList</string>
+	<string name="import_from_anilist_summary">Import your reading list and sync chapter progress</string>
+	<string name="anilist_import_resolving">Searching sources for titles…</string>
+	<string name="anilist_import_preview_title">AniList Import Preview</string>
+	<string name="anilist_import_matched">Ready to import</string>
+	<string name="anilist_import_review">Review required</string>
+	<string name="anilist_import_already_linked">Already in library</string>
+	<string name="anilist_import_not_found">Not found</string>
+	<string name="anilist_import_skipped_adult">Skipped adult titles (NSFW disabled): %d</string>
+	<string name="anilist_import_confirm">Import Selected</string>
+	<string name="anilist_import_in_progress">Importing AniList titles…</string>
+	<string name="anilist_import_complete">Import complete: %d titles updated</string>
+	<string name="anilist_channel_name">AniList Import</string>
+	<string name="anilist_import_confirm_msg">Import your AniList reading list and sync chapter progress in the background? You can follow live progress in your notification bar.</string>
+	<string name="start_import">Start Import</string>
+	<string name="liquid_glass">Liquid Glass design</string>
+	<string name="liquid_glass_summary">Refractive glass surfaces, living wallpaper, and spring motion</string>
+	<string name="liquid_glass_dark_only_summary">Liquid Glass requires dark theme</string>
+	<string name="continue_reading">Continue reading</string>
+	<string name="color_liquid_glass">Liquid Glass</string>
+	<string name="new_chapters_categories">New chapters rail categories</string>
+	<string name="new_chapters_categories_summary">Select categories to show in the new chapters rail</string>
+	<string name="all_categories">All categories</string>
+	<string name="dismiss_until_next_chapter">Dismiss until next chapter</string>
+	<string name="hide_from_new_rail">Hide from New chapters rail</string>
+	<string name="pull_from_anilist">Pull progress from AniList</string>
+	<string name="pull_from_anilist_summary">Automatically pull read progress for linked titles</string>
+	<string name="anilist_sync_now">Sync now</string>
+	<string name="anilist_sync_never">Last synced: Never</string>
+	<string name="anilist_sync_last">Last synced %s</string>
+	<string name="anilist_sync_log">Sync log</string>
+	<string name="anilist_sync_log_summary">Recent progress updates from AniList</string>
+	<string name="anilist_sync_log_empty">No recent progress updates</string>
+	<string name="anilist_sync_in_progress">Syncing with AniList…</string>
+	<string name="anilist_sync_success">AniList sync complete (%d updated)</string>
+	<string name="anilist_sync_failed">AniList sync failed</string>
+	<string name="select_default_scanlator">Default scanlation group</string>
+	<string name="select_default_scanlator_prompt">Multiple scanlation groups are available. Select your preferred default group.\n\n\'All\' mode will use your default group, and show any newer releases from other groups on top.</string>
+	<string name="recommended">Recommended</string>
 </resources>

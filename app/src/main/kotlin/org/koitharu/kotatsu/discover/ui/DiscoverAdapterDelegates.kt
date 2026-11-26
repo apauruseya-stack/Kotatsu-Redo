@@ -52,6 +52,7 @@ fun discoverRowAD(
 	sizeResolver: ItemSizeResolver,
 	coverPool: RecyclerView.RecycledViewPool,
 	onOpenSuggestions: () -> Unit,
+	onOpenFeed: () -> Unit,
 	clickListener: OnListItemClickListener<MangaListModel>,
 	onDismissClick: (MangaListModel, View) -> Unit,
 ) = adapterDelegateViewBinding<DiscoverRowItem, ListModel, ItemListGroupBinding>(
@@ -66,7 +67,6 @@ fun discoverRowAD(
 	(binding.recyclerView.layoutManager as? LinearLayoutManager)?.initialPrefetchItemCount = ROW_PREFETCH
 	binding.recyclerView.addOnItemTouchListener(RowInsideSwipingPages(binding.recyclerView))
 	binding.buttonMore.setText(R.string.show_all)
-	binding.buttonMore.setOnClickListener { onOpenSuggestions() }
 	bind {
 		val titleText = item.titleText
 		val titleArgument = item.titleArgument
@@ -75,7 +75,24 @@ fun discoverRowAD(
 			titleArgument != null -> binding.textViewTitle.text = context.getString(item.title, titleArgument)
 			else -> binding.textViewTitle.setText(item.title)
 		}
-		binding.buttonMore.visibility = if (item.opensSuggestions) View.VISIBLE else View.GONE
+		if (item.icon != 0) {
+			binding.textViewTitle.setCompoundDrawablesRelativeWithIntrinsicBounds(item.icon, 0, 0, 0)
+			binding.textViewTitle.compoundDrawablePadding = (6 * context.resources.displayMetrics.density).toInt()
+		} else {
+			binding.textViewTitle.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
+		}
+		val hasMore = item.opensSuggestions || item.opensFeed
+		binding.buttonMore.visibility = if (hasMore) View.VISIBLE else View.GONE
+		if (item.opensFeed) {
+			binding.buttonMore.setOnClickListener { onOpenFeed() }
+			binding.textViewTitle.setOnClickListener { onOpenFeed() }
+		} else if (item.opensSuggestions) {
+			binding.buttonMore.setOnClickListener { onOpenSuggestions() }
+			binding.textViewTitle.setOnClickListener { onOpenSuggestions() }
+		} else {
+			binding.textViewTitle.setOnClickListener(null)
+			binding.textViewTitle.isClickable = false
+		}
 		binding.textViewError.isVisible = false
 		adapter.items = if (item.isLoading) List(ROW_PLACEHOLDERS) { DiscoverPlaceholder(it) } else item.items
 	}

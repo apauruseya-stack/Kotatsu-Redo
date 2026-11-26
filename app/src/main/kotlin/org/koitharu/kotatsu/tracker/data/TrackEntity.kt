@@ -30,6 +30,24 @@ class TrackEntity(
 	@ColumnInfo(name = "last_error") val lastError: String?,
 ) {
 
+	fun copy(
+		mangaId: Long = this.mangaId,
+		lastChapterId: Long = this.lastChapterId,
+		newChapters: Int = this.newChapters,
+		lastCheckTime: Long = this.lastCheckTime,
+		lastChapterDate: Long = this.lastChapterDate,
+		@TrackerResult lastResult: Int = this.lastResult,
+		lastError: String? = this.lastError,
+	) = TrackEntity(
+		mangaId = mangaId,
+		lastChapterId = lastChapterId,
+		newChapters = newChapters,
+		lastCheckTime = lastCheckTime,
+		lastChapterDate = lastChapterDate,
+		lastResult = lastResult,
+		lastError = lastError,
+	)
+
 	@IntDef(RESULT_NONE, RESULT_HAS_UPDATE, RESULT_NO_UPDATE, RESULT_FAILED, RESULT_EXTERNAL_MODIFICATION)
 	@Retention(AnnotationRetention.SOURCE)
 	annotation class TrackerResult

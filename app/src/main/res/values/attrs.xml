@@ -15,6 +15,14 @@
 	<attr name="badgeViewStyle" />
 	<attr name="coverImageViewStyle" />
 
+	<!-- Liquid Glass Theme Attributes -->
+	<attr name="glassAccent" format="color" />
+	<attr name="glassFill" format="color" />
+	<attr name="glassRim" format="color" />
+	<attr name="glassStroke" format="color" />
+	<attr name="glassTint" format="color" />
+	<attr name="glassGlow" format="color" />
+
 	<declare-styleable name="CoilImageView">
 		<attr name="allowRgb565" format="boolean" />
 		<attr name="useExistingDrawable" format="boolean" />

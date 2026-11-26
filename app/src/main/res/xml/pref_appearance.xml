@@ -73,6 +73,12 @@
 			android:key="manga_list_badges"
 			android:title="@string/badges_in_lists" />
 
+		<MultiSelectListPreference
+			android:icon="@drawable/ic_list_group"
+			android:key="new_chapters_categories"
+			android:summary="@string/new_chapters_categories_summary"
+			android:title="@string/new_chapters_categories" />
+
 	</PreferenceCategory>
 
 	<PreferenceCategory android:title="@string/manga_page">
@@ -131,10 +137,18 @@
 			android:title="@string/show_labels_in_navbar" />
 
 		<SwitchPreferenceCompat
+			android:defaultValue="true"
 			android:icon="@drawable/ic_nav_bar"
 			android:key="floating_nav"
 			android:summary="@string/floating_nav_bar_summary"
 			android:title="@string/floating_nav_bar" />
+
+		<SwitchPreferenceCompat
+			android:defaultValue="true"
+			android:icon="@drawable/ic_appearance"
+			android:key="liquid_glass"
+			android:summary="@string/liquid_glass_summary"
+			android:title="@string/liquid_glass" />
 
 		<SwitchPreferenceCompat
 			android:defaultValue="false"

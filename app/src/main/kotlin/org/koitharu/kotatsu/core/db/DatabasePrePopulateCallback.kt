@@ -19,7 +19,7 @@ class DatabasePrePopulateCallback(private val resources: Resources) : RoomDataba
 				1,
 				1,
 				0L,
-			)
+			),
 		)
 	}
 }

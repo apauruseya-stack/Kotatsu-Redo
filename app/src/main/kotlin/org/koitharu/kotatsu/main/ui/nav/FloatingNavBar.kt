@@ -8,13 +8,14 @@ import androidx.annotation.IdRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -24,27 +25,37 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -52,10 +63,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import org.koitharu.kotatsu.R
 
@@ -79,6 +93,9 @@ private val SpringFloat = spring<Float>(dampingRatio = 0.9f, stiffness = 380f)
 private val SpringColor = spring<Color>(dampingRatio = 0.9f, stiffness = 380f)
 private val SpringSize = spring<IntSize>(dampingRatio = 0.9f, stiffness = 380f)
 
+// Liquid Glass active indicator lens spring (damping ratio 0.6f, stiffness 220f)
+private val SpringLensDp = spring<Dp>(dampingRatio = 0.6f, stiffness = 220f)
+
 @Composable
 fun FloatingNavBar(
 	items: List<FloatingNavBarItem>,
@@ -89,35 +106,22 @@ fun FloatingNavBar(
 	onItemReselected: (Int) -> Unit,
 	modifier: Modifier = Modifier,
 	showContinue: Boolean = false,
+	isLiquidGlass: Boolean = false,
 	onContinueClick: () -> Unit = {},
 ) {
 	if (items.isEmpty()) return
-	val selectedTitle = stringResource(items.firstOrNull { it.id == selectedId }?.titleRes ?: items.first().titleRes)
-	val labelStyle = MaterialTheme.typography.labelMedium
-	val textMeasurer = rememberTextMeasurer()
-	val density = LocalDensity.current
-	val selectedLabelExtra = with(density) {
-		textMeasurer.measure(text = selectedTitle, style = labelStyle).size.width.toDp()
-	} + 8.dp
 
 	BoxWithConstraints(
 		modifier = modifier.fillMaxWidth(),
 		contentAlignment = Alignment.Center,
 	) {
-		// 48dp per destination is the minimum accessible touch target. Calculate before composing
-		// the children so a long translated label cannot consume the Continue button's width.
+		// 48dp per destination is the minimum accessible touch target.
 		val iconOnlyBarWidth = 16.dp +
-			(48.dp * items.size) +
-			(4.dp * (items.size - 1).coerceAtLeast(0))
-		val continueWidth = 56.dp + 8.dp
-		val stackContinue = showContinue && iconOnlyBarWidth + continueWidth > maxWidth
-		val availableBarWidth = if (showContinue && !stackContinue) {
-			maxWidth - continueWidth
-		} else {
-			maxWidth
-		}
-		val showSelectedLabel = showLabels &&
-			iconOnlyBarWidth + selectedLabelExtra <= availableBarWidth
+			(54.dp * items.size) +
+			(2.dp * (items.size - 1).coerceAtLeast(0))
+		val continueWidth = 48.dp + 8.dp
+		val stackContinue = showContinue && (iconOnlyBarWidth + continueWidth > this@BoxWithConstraints.maxWidth)
+		val showSelectedLabel = showLabels
 
 		if (stackContinue) {
 			Column(
@@ -127,6 +131,7 @@ fun FloatingNavBar(
 				FloatingContinueVisibility(
 					visible = true,
 					colors = colors,
+					isLiquidGlass = isLiquidGlass,
 					onContinueClick = onContinueClick,
 				)
 				FloatingNavItemsSurface(
@@ -134,6 +139,7 @@ fun FloatingNavBar(
 					selectedId = selectedId,
 					showSelectedLabel = showSelectedLabel,
 					colors = colors,
+					isLiquidGlass = isLiquidGlass,
 					onItemSelected = onItemSelected,
 					onItemReselected = onItemReselected,
 				)
@@ -149,12 +155,14 @@ fun FloatingNavBar(
 					selectedId = selectedId,
 					showSelectedLabel = showSelectedLabel,
 					colors = colors,
+					isLiquidGlass = isLiquidGlass,
 					onItemSelected = onItemSelected,
 					onItemReselected = onItemReselected,
 				)
 				FloatingContinueVisibility(
 					visible = showContinue,
 					colors = colors,
+					isLiquidGlass = isLiquidGlass,
 					onContinueClick = onContinueClick,
 				)
 			}
@@ -168,39 +176,228 @@ private fun FloatingNavItemsSurface(
 	selectedId: Int,
 	showSelectedLabel: Boolean,
 	colors: FloatingNavBarColors,
+	isLiquidGlass: Boolean,
 	onItemSelected: (Int) -> Unit,
 	onItemReselected: (Int) -> Unit,
 ) {
+	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+	val glassBorder = if (isLiquidGlass) {
+		BorderStroke(
+			1.dp,
+			Brush.verticalGradient(
+				colors = if (isDark) {
+					listOf(
+						Color.White.copy(alpha = 0.75f),
+						Color.White.copy(alpha = 0.22f),
+					)
+				} else {
+					listOf(
+						Color.White.copy(alpha = 0.95f),
+						Color(0xFFE0D8F0).copy(alpha = 0.60f),
+					)
+				},
+			),
+		)
+	} else {
+		val borderColor = if (isDark) Color.White.copy(alpha = 0.16f) else Color.Black.copy(alpha = 0.08f)
+		BorderStroke(1.dp, borderColor)
+	}
+
+	val pillInteractionSource = remember { MutableInteractionSource() }
+	val containerModifier = (if (isLiquidGlass) {
+		Modifier
+			.shadow(
+				elevation = 18.dp,
+				shape = CircleShape,
+				spotColor = if (isDark) Color(0xFF5B2BD8).copy(alpha = 0.55f) else Color(0xFF7C4DFF).copy(alpha = 0.25f),
+				ambientColor = if (isDark) Color.Black.copy(alpha = 0.45f) else Color(0xFF221A38).copy(alpha = 0.15f),
+			)
+			.border(glassBorder, CircleShape)
+			.background(
+				brush = Brush.verticalGradient(
+					colors = if (isDark) {
+						listOf(
+							Color(0xFF221A38).copy(alpha = 0.82f),
+							Color(0xFF100E1E).copy(alpha = 0.88f),
+						)
+					} else {
+						listOf(
+							Color(0xFFFFFFFF).copy(alpha = 0.90f),
+							Color(0xFFF3F0FA).copy(alpha = 0.94f),
+						)
+					},
+				),
+				shape = CircleShape,
+			)
+			.wrapContentWidth()
+	} else {
+		Modifier
+			.shadow(
+				elevation = 12.dp,
+				shape = CircleShape,
+				spotColor = Color.Black.copy(alpha = 0.55f),
+				ambientColor = Color.Black.copy(alpha = 0.25f),
+			)
+			.border(glassBorder, CircleShape)
+			.wrapContentWidth()
+	}).clickable(interactionSource = pillInteractionSource, indication = null) {}
+
 	Surface(
-		modifier = Modifier
-			.shadow(8.dp, RoundedCornerShape(50))
-			.wrapContentWidth(),
-		shape = RoundedCornerShape(50),
-		color = Color(colors.container),
+		modifier = containerModifier,
+		shape = CircleShape,
+		color = if (isLiquidGlass) Color.Transparent else Color(colors.container).copy(alpha = if (isDark) 0.88f else 0.94f),
 		contentColor = MaterialTheme.colorScheme.onSurface,
 	) {
+		FloatingNavDockLayout(
+			items = items,
+			selectedId = selectedId,
+			showLabels = showSelectedLabel,
+			colors = colors,
+			isLiquidGlass = isLiquidGlass,
+			onItemSelected = onItemSelected,
+			onItemReselected = onItemReselected,
+		)
+	}
+}
+
+@Composable
+private fun FloatingNavDockLayout(
+	items: List<FloatingNavBarItem>,
+	selectedId: Int,
+	showLabels: Boolean,
+	colors: FloatingNavBarColors,
+	isLiquidGlass: Boolean,
+	onItemSelected: (Int) -> Unit,
+	onItemReselected: (Int) -> Unit,
+) {
+	val density = LocalDensity.current
+	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+	val itemBoundsMap = remember { mutableStateMapOf<Int, Pair<Dp, Dp>>() }
+
+	val activeBounds = itemBoundsMap[selectedId]
+	val targetX = activeBounds?.first ?: 0.dp
+	val targetW = activeBounds?.second ?: 58.dp
+
+	val animatedX by animateDpAsState(
+		targetValue = targetX,
+		animationSpec = SpringLensDp,
+		label = "lensX",
+	)
+	val animatedW by animateDpAsState(
+		targetValue = targetW,
+		animationSpec = SpringLensDp,
+		label = "lensW",
+	)
+
+	val barHeight = if (showLabels) 58.dp else 48.dp
+
+	Box(
+		modifier = Modifier
+			.height(barHeight)
+			.padding(horizontal = 6.dp, vertical = 4.dp),
+	) {
+		// Active indicator pill (around the icon)
+		if (activeBounds != null) {
+			val indicatorWidth = (animatedW - 6.dp).coerceIn(46.dp, 56.dp)
+			val indicatorHeight = if (showLabels) 30.dp else 38.dp
+			val indicatorX = animatedX + (animatedW - indicatorWidth) / 2
+			val indicatorY = if (showLabels) 2.dp else 1.dp
+
+			val indicatorModifier = Modifier
+				.offset(x = indicatorX, y = indicatorY)
+				.width(indicatorWidth)
+				.height(indicatorHeight)
+
+			if (isLiquidGlass) {
+				Box(
+					modifier = indicatorModifier
+						.shadow(
+							elevation = 4.dp,
+							shape = CircleShape,
+							spotColor = if (isDark) Color(0xFF2B4470).copy(alpha = 0.50f) else Color(0xFF7C4DFF).copy(alpha = 0.25f),
+							ambientColor = if (isDark) Color.Black.copy(alpha = 0.40f) else Color(0xFF221A38).copy(alpha = 0.12f),
+						)
+						.background(
+							brush = Brush.verticalGradient(
+								colors = if (isDark) {
+									listOf(
+										Color(0xFF2B4470).copy(alpha = 0.88f),
+										Color(0xFF1B2E52).copy(alpha = 0.92f),
+									)
+								} else {
+									listOf(
+										Color(0xFFD6E4FF),
+										Color(0xFFB8D3FF),
+									)
+								},
+							),
+							shape = CircleShape,
+						)
+						.border(
+							BorderStroke(
+								1.dp,
+								Brush.verticalGradient(
+									colors = if (isDark) {
+										listOf(
+											Color(0xFF6B92FF).copy(alpha = 0.55f),
+											Color(0xFF3B62C2).copy(alpha = 0.30f),
+										)
+									} else {
+										listOf(
+											Color.White,
+											Color(0xFF90B4F8).copy(alpha = 0.70f),
+										)
+									},
+								),
+							),
+							CircleShape,
+						),
+				)
+			} else {
+				Box(
+					modifier = indicatorModifier
+						.background(
+							color = Color(colors.selectedContainer),
+							shape = CircleShape,
+						),
+				)
+			}
+		}
+
 		Row(
 			modifier = Modifier
-				.heightIn(min = 64.dp)
-				.padding(horizontal = 8.dp, vertical = 8.dp)
-				.animateContentSize(animationSpec = SpringSize),
-			horizontalArrangement = Arrangement.spacedBy(4.dp),
+				.fillMaxHeight()
+				.wrapContentWidth(),
+			horizontalArrangement = Arrangement.spacedBy(2.dp),
 			verticalAlignment = Alignment.CenterVertically,
 		) {
 			items.forEach { item ->
-				FloatingNavItem(
-					item = item,
-					selected = item.id == selectedId,
-					showLabel = showSelectedLabel,
-					colors = colors,
-					onClick = {
-						if (item.id == selectedId) {
-							onItemReselected(item.id)
-						} else {
-							onItemSelected(item.id)
-						}
-					},
-				)
+				val isSelected = item.id == selectedId
+				Box(
+					modifier = Modifier
+						.fillMaxHeight()
+						.onGloballyPositioned { coords ->
+							val posInParent = coords.positionInParent()
+							val xDp = with(density) { posInParent.x.toDp() }
+							val wDp = with(density) { coords.size.width.toDp() }
+							itemBoundsMap[item.id] = Pair(xDp, wDp)
+						},
+				) {
+					CompactNavItem(
+						item = item,
+						selected = isSelected,
+						showLabel = showLabels,
+						colors = colors,
+						isLiquidGlass = isLiquidGlass,
+						onClick = {
+							if (isSelected) {
+								onItemReselected(item.id)
+							} else {
+								onItemSelected(item.id)
+							}
+						},
+					)
+				}
 			}
 		}
 	}
@@ -210,6 +407,7 @@ private fun FloatingNavItemsSurface(
 private fun FloatingContinueVisibility(
 	visible: Boolean,
 	colors: FloatingNavBarColors,
+	isLiquidGlass: Boolean,
 	onContinueClick: () -> Unit,
 ) {
 	AnimatedVisibility(
@@ -219,22 +417,35 @@ private fun FloatingContinueVisibility(
 		exit = fadeOut(animationSpec = SpringFloat) +
 			shrinkHorizontally(animationSpec = SpringSize, shrinkTowards = Alignment.Start),
 	) {
-		FloatingContinueButton(colors = colors, onClick = onContinueClick)
+		FloatingContinueButton(colors = colors, isLiquidGlass = isLiquidGlass, onClick = onContinueClick)
 	}
 }
 
 @Composable
 private fun FloatingContinueButton(
 	colors: FloatingNavBarColors,
+	isLiquidGlass: Boolean,
 	onClick: () -> Unit,
 ) {
+	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+	val glassBorderColor = if (isLiquidGlass) {
+		if (isDark) Color.White.copy(alpha = 0.28f) else Color(0xFF7C4DFF).copy(alpha = 0.35f)
+	} else if (isDark) {
+		Color.White.copy(alpha = 0.20f)
+	} else {
+		Color.Black.copy(alpha = 0.10f)
+	}
 	val container by animateColorAsState(
-		targetValue = Color(colors.selectedContainer),
+		targetValue = if (isLiquidGlass) {
+			if (isDark) Color(0xFF6B42E8).copy(alpha = 0.88f) else Color(0xFF7C4DFF).copy(alpha = 0.92f)
+		} else {
+			Color(colors.selectedContainer).copy(alpha = if (isDark) 0.88f else 0.94f)
+		},
 		animationSpec = SpringColor,
 		label = "continueContainer",
 	)
 	val content by animateColorAsState(
-		targetValue = Color(colors.selectedContent),
+		targetValue = if (isLiquidGlass) Color.White else Color(colors.selectedContent),
 		animationSpec = SpringColor,
 		label = "continueContent",
 	)
@@ -244,9 +455,15 @@ private fun FloatingContinueButton(
 		shape = CircleShape,
 		color = container,
 		contentColor = content,
-		shadowElevation = 8.dp,
 		modifier = Modifier
-			.size(56.dp)
+			.size(48.dp)
+			.shadow(
+				elevation = 8.dp,
+				shape = CircleShape,
+				spotColor = Color.Black.copy(alpha = 0.35f),
+				ambientColor = Color.Black.copy(alpha = 0.15f),
+			)
+			.border(BorderStroke(1.dp, glassBorderColor), CircleShape)
 			.semantics { contentDescription = label },
 	) {
 		Box(contentAlignment = Alignment.Center) {
@@ -254,38 +471,68 @@ private fun FloatingContinueButton(
 				painter = painterResource(R.drawable.ic_read),
 				contentDescription = null,
 				tint = content,
-				modifier = Modifier.size(24.dp),
+				modifier = Modifier.size(20.dp),
 			)
 		}
 	}
 }
 
 @Composable
-private fun FloatingNavItem(
+private fun CompactNavItem(
 	item: FloatingNavBarItem,
 	selected: Boolean,
 	showLabel: Boolean,
 	colors: FloatingNavBarColors,
+	isLiquidGlass: Boolean,
 	onClick: () -> Unit,
 ) {
-	val container by animateColorAsState(
-		targetValue = if (selected) Color(colors.selectedContainer) else Color.Transparent,
+	val context = LocalContext.current
+	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+	val activeTint = remember(context.theme, isLiquidGlass) {
+		if (isLiquidGlass) {
+			val typedValue = android.util.TypedValue()
+			if (context.theme.resolveAttribute(R.attr.glassAccent, typedValue, true)) {
+				Color(typedValue.data)
+			} else {
+				Color(0xFF7FA7F8)
+			}
+		} else {
+			Color(colors.selectedContent)
+		}
+	}
+	val unselectedColor = if (isLiquidGlass) {
+		if (isDark) Color.White.copy(alpha = 0.70f) else Color(0xFF49454F).copy(alpha = 0.85f)
+	} else {
+		Color(colors.unselectedContent)
+	}
+
+	val contentColor by animateColorAsState(
+		targetValue = if (selected) activeTint else unselectedColor,
 		animationSpec = SpringColor,
-		label = "navItemContainer",
+		label = "compactContentColor",
 	)
-	val content by animateColorAsState(
-		targetValue = if (selected) Color(colors.selectedContent) else Color(colors.unselectedContent),
+	val iconTint by animateColorAsState(
+		targetValue = if (selected) {
+			if (isDark && isLiquidGlass) Color.White else activeTint
+		} else {
+			unselectedColor
+		},
 		animationSpec = SpringColor,
-		label = "navItemContent",
+		label = "compactIconTint",
 	)
 	val title = stringResource(item.titleRes)
 	val interactionSource = remember { MutableInteractionSource() }
 
+	val badgeDescription = if (item.badgeCount > 0) {
+		context.resources.getQuantityString(R.plurals.nav_badge_new_items, item.badgeCount, item.badgeCount)
+	} else {
+		null
+	}
+
 	Box(
 		modifier = Modifier
-			.height(48.dp)
-			.widthIn(min = 48.dp)
-			.background(color = container, shape = CircleShape)
+			.fillMaxHeight()
+			.widthIn(min = 54.dp, max = 68.dp)
 			.clickable(
 				interactionSource = interactionSource,
 				indication = null,
@@ -294,51 +541,63 @@ private fun FloatingNavItem(
 			.semantics {
 				this.selected = selected
 				role = Role.Tab
-				contentDescription = title
+				contentDescription = if (badgeDescription != null) "$title, $badgeDescription" else title
 			},
 		contentAlignment = Alignment.Center,
 	) {
-		Row(
-			modifier = Modifier.padding(horizontal = 12.dp),
-			verticalAlignment = Alignment.CenterVertically,
-			horizontalArrangement = Arrangement.Center,
+		Column(
+			modifier = Modifier
+				.fillMaxHeight()
+				.padding(horizontal = 4.dp, vertical = 2.dp),
+			horizontalAlignment = Alignment.CenterHorizontally,
+			verticalArrangement = Arrangement.Center,
 		) {
-			BadgedBox(
-				badge = {
-					if (item.badgeCount > 0) {
-						Badge { Text(text = if (item.badgeCount > 99) "99+" else item.badgeCount.toString()) }
-					} else if (item.badgeCount < 0) {
-						Badge()
-					}
-				},
+			Box(
+				modifier = Modifier
+					.height(if (showLabel) 30.dp else 38.dp)
+					.fillMaxWidth(),
+				contentAlignment = Alignment.Center,
 			) {
-				NavIcon(
-					resId = item.icon,
-					selected = selected,
-					tint = content,
-					modifier = Modifier.size(24.dp),
-				)
+				BadgedBox(
+					badge = {
+						if (item.badgeCount > 0) {
+							Badge(
+								containerColor = Color(0xFFE8382F),
+								contentColor = Color.White,
+								modifier = Modifier.offset(x = 4.dp, y = (-2).dp),
+							) {
+								Text(
+									text = if (item.badgeCount > 99) "99+" else item.badgeCount.toString(),
+									style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+								)
+							}
+						} else if (item.badgeCount < 0) {
+							Badge(
+								containerColor = Color(0xFFE8382F),
+								modifier = Modifier.offset(x = 4.dp, y = (-2).dp),
+							)
+						}
+					},
+				) {
+					NavIcon(
+						resId = item.icon,
+						selected = selected,
+						tint = iconTint,
+						modifier = Modifier.size(20.dp),
+					)
+				}
 			}
-			AnimatedVisibility(
-				visible = selected && showLabel,
-				enter = expandHorizontally(animationSpec = SpringSize, expandFrom = Alignment.Start) +
-					fadeIn(animationSpec = SpringFloat),
-				exit = shrinkHorizontally(animationSpec = SpringSize, shrinkTowards = Alignment.Start) +
-					fadeOut(animationSpec = SpringFloat),
-			) {
+			if (showLabel) {
 				Text(
 					text = title,
-					color = content,
-					style = MaterialTheme.typography.labelMedium,
+					color = contentColor,
+					style = MaterialTheme.typography.labelSmall.copy(
+						fontSize = 10.5.sp,
+						fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+					),
 					maxLines = 1,
-					// The badge hangs off the icon without taking up any room of its own, so a wide one needs the gap
-						modifier = Modifier.padding(
-							start = when {
-								item.badgeCount > 99 -> 22.dp
-								item.badgeCount > 9 -> 16.dp
-								else -> 8.dp
-							},
-						),
+					overflow = TextOverflow.Ellipsis,
+					modifier = Modifier.padding(top = 1.dp),
 				)
 			}
 		}

@@ -77,6 +77,22 @@ sealed interface ListFilterOption {
 			get() = "_branch"
 	}
 
+	data class Scanlator(
+		override val titleText: String?,
+		val chaptersCount: Int,
+		val isAll: Boolean = false,
+	) : ListFilterOption {
+
+		override val titleResId: Int
+			get() = if (isAll) R.string.chapters_all else 0
+
+		override val iconResId: Int
+			get() = 0
+
+		override val groupKey: String
+			get() = "_scanlator"
+	}
+
 	data class Tag(
 		val tag: MangaTag
 	) : ListFilterOption {

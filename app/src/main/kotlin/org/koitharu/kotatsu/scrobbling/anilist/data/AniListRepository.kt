@@ -1,7 +1,9 @@
 package org.koitharu.kotatsu.scrobbling.anilist.data
 
 import android.content.Context
+import java.util.Locale
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -16,6 +18,7 @@ import org.koitharu.kotatsu.parsers.util.json.getStringOrNull
 import org.koitharu.kotatsu.parsers.util.json.mapJSON
 import org.koitharu.kotatsu.parsers.util.parseJson
 import org.koitharu.kotatsu.parsers.util.toIntUp
+import org.koitharu.kotatsu.scrobbling.anilist.domain.model.AniListMediaEntry
 import org.koitharu.kotatsu.scrobbling.common.data.ScrobblerRepository
 import org.koitharu.kotatsu.scrobbling.common.data.ScrobblerStorage
 import org.koitharu.kotatsu.scrobbling.common.data.ScrobblingEntity
@@ -37,8 +40,8 @@ private const val REQUEST_MUTATION = "mutation"
 private const val KEY_SCORE_FORMAT = "score_format"
 
 @Singleton
-class AniListRepository @Inject constructor(
-	@ApplicationContext context: Context,
+open class AniListRepository @Inject constructor(
+	@ApplicationContext private val context: Context,
 	@ScrobblerType(ScrobblerService.ANILIST) private val okHttp: OkHttpClient,
 	@ScrobblerType(ScrobblerService.ANILIST) private val storage: ScrobblerStorage,
 	private val db: MangaDatabase,
@@ -74,6 +77,10 @@ class AniListRepository @Inject constructor(
 		val response = okHttp.newCall(request.build()).await().parseJson()
 		storage.accessToken = response.getString("access_token")
 		storage.refreshToken = response.getString("refresh_token")
+		// Invalidate cached import plan on account change
+		runCatching {
+			java.io.File(context.cacheDir, "anilist_import_plan.json").delete()
+		}
 	}
 
 	override suspend fun loadUser(): ScrobblerUser {
@@ -110,6 +117,9 @@ class AniListRepository @Inject constructor(
 
 	override fun logout() {
 		storage.clear()
+		runCatching {
+			java.io.File(context.cacheDir, "anilist_import_plan.json").delete()
+		}
 	}
 
 	override suspend fun findManga(query: String, offset: Int): List<ScrobblerManga> {
@@ -210,6 +220,281 @@ class AniListRepository @Inject constructor(
 		return ScrobblerMangaInfo(response.getJSONObject("data").getJSONObject("Media"))
 	}
 
+	suspend fun fetchMediaList(userId: Long): List<AniListMediaEntry> {
+		val scoreFormat = ScoreFormat.of(storage[KEY_SCORE_FORMAT])
+		val result = ArrayList<AniListMediaEntry>()
+		var chunk = 1
+		while (true) {
+			val response = doRequest(
+				REQUEST_QUERY,
+				"""
+				MediaListCollection(userId: $userId, type: MANGA, chunk: $chunk, perChunk: 500) {
+					hasNextChunk
+					lists {
+						name
+						isCustomList
+						status
+						entries {
+							id
+							mediaId
+							status
+							score
+							progress
+							notes
+							updatedAt
+							createdAt
+							startedAt {
+								year
+								month
+								day
+							}
+							completedAt {
+								year
+								month
+								day
+							}
+							media {
+								id
+								isAdult
+								format
+								chapters
+								siteUrl
+								coverImage {
+									large
+									medium
+								}
+								title {
+									userPreferred
+									english
+									romaji
+									native
+								}
+								synonyms
+							}
+						}
+					}
+				}
+				""",
+			)
+			val collection = response.getJSONObject("data").getJSONObject("MediaListCollection")
+			val lists = collection.getJSONArray("lists")
+			for (i in 0 until lists.length()) {
+				val listObj = lists.getJSONObject(i)
+				val listStatus = listObj.optString("status", "").ifEmpty { null }
+				val listName = listObj.optString("name", "").trim()
+				val resolvedListStatus = listStatus ?: when (listName.uppercase(Locale.ROOT)) {
+					"PLANNING", "PLAN TO READ", "READ LATER" -> "PLANNING"
+					"READING", "CURRENT" -> "CURRENT"
+					"COMPLETED" -> "COMPLETED"
+					"PAUSED", "ON HOLD" -> "PAUSED"
+					"DROPPED" -> "DROPPED"
+					else -> null
+				}
+				val entries = listObj.getJSONArray("entries")
+				for (j in 0 until entries.length()) {
+					val entry = entries.getJSONObject(j)
+					val media = entry.getJSONObject("media")
+					val isAdult = media.optBoolean("isAdult", false)
+					val titleObj = media.getJSONObject("title")
+					val userPreferred = titleObj.optString("userPreferred", "")
+					val allTitles = LinkedHashSet<String>()
+					if (userPreferred.isNotEmpty()) allTitles.add(userPreferred)
+					titleObj.getStringOrNull("english")?.let { if (it.isNotEmpty()) allTitles.add(it) }
+					titleObj.getStringOrNull("romaji")?.let { if (it.isNotEmpty()) allTitles.add(it) }
+					titleObj.getStringOrNull("native")?.let { if (it.isNotEmpty()) allTitles.add(it) }
+					val synonymsArr = media.optJSONArray("synonyms")
+					if (synonymsArr != null) {
+						for (s in 0 until synonymsArr.length()) {
+							val syn = synonymsArr.optString(s, "").trim()
+							if (syn.isNotEmpty()) allTitles.add(syn)
+						}
+					}
+
+					val coverObj = media.optJSONObject("coverImage")
+					val coverUrl = coverObj?.getStringOrNull("large") ?: coverObj?.getStringOrNull("medium")
+					val totalChapters = if (media.has("chapters") && !media.isNull("chapters")) {
+						media.getInt("chapters")
+					} else {
+						null
+					}
+
+					val entryStatus = entry.optString("status", "").ifEmpty {
+						resolvedListStatus ?: when (listName.uppercase(Locale.ROOT)) {
+							"PLANNING", "PLAN TO READ", "READ LATER" -> "PLANNING"
+							"READING", "CURRENT" -> "CURRENT"
+							"COMPLETED" -> "COMPLETED"
+							"PAUSED", "ON HOLD" -> "PAUSED"
+							"DROPPED" -> "DROPPED"
+							else -> "CURRENT"
+						}
+					}
+					val rawScore = entry.optDouble("score", 0.0).toFloat()
+					val format = media.getStringOrNull("format")
+
+					val updatedAt = AniListTimestampMapper.resolveTimestamp(entry)
+
+					result.add(
+						AniListMediaEntry(
+							entryId = entry.getInt("id"),
+							mediaId = entry.getLong("mediaId"),
+							status = entryStatus,
+							progress = entry.optInt("progress", 0),
+							score = scoreFormat.normalize(rawScore),
+							notes = entry.getStringOrNull("notes"),
+							preferredTitle = userPreferred,
+							allTitles = allTitles.toList(),
+							totalChapters = totalChapters,
+							coverUrl = coverUrl,
+							siteUrl = media.getStringOrNull("siteUrl"),
+							format = format,
+							updatedAt = updatedAt,
+							isAdult = isAdult,
+						),
+					)
+				}
+			}
+			val hasNextChunk = collection.optBoolean("hasNextChunk", false)
+			if (!hasNextChunk) {
+				break
+			}
+			chunk++
+		}
+		return result.distinctBy { it.mediaId }
+	}
+
+	open suspend fun fetchMediaListUpdatedSince(userId: Long, sinceTimestampSeconds: Long): List<AniListMediaEntry> {
+		val scoreFormat = ScoreFormat.of(storage[KEY_SCORE_FORMAT])
+		val result = ArrayList<AniListMediaEntry>()
+		var page = 1
+		var stopPaging = false
+
+		while (!stopPaging) {
+			val response = doRequest(
+				REQUEST_QUERY,
+				"""
+				Page(page: $page, perPage: 50) {
+					pageInfo {
+						hasNextPage
+						currentPage
+					}
+					mediaList(userId: $userId, type: MANGA, sort: [UPDATED_TIME_DESC]) {
+						id
+						mediaId
+						status
+						score
+						progress
+						notes
+						updatedAt
+						createdAt
+						startedAt {
+							year
+							month
+							day
+						}
+						completedAt {
+							year
+							month
+							day
+						}
+						media {
+							id
+							isAdult
+							format
+							chapters
+							siteUrl
+							coverImage {
+								large
+								medium
+							}
+							title {
+								userPreferred
+								english
+								romaji
+								native
+							}
+							synonyms
+						}
+					}
+				}
+				""",
+			)
+			val pageObj = response.getJSONObject("data").getJSONObject("Page")
+			val pageInfo = pageObj.getJSONObject("pageInfo")
+			val hasNextPage = pageInfo.optBoolean("hasNextPage", false)
+			val entries = pageObj.optJSONArray("mediaList") ?: break
+
+			if (entries.length() == 0) {
+				break
+			}
+
+			for (i in 0 until entries.length()) {
+				val entry = entries.getJSONObject(i)
+				val updatedAtSec = if (entry.has("updatedAt") && !entry.isNull("updatedAt")) {
+					entry.optLong("updatedAt", 0L)
+				} else {
+					0L
+				}
+				if (sinceTimestampSeconds > 0 && updatedAtSec > 0 && updatedAtSec < sinceTimestampSeconds) {
+					stopPaging = true
+					break
+				}
+				val media = entry.getJSONObject("media")
+				val isAdult = media.optBoolean("isAdult", false)
+				val titleObj = media.getJSONObject("title")
+				val userPreferred = titleObj.optString("userPreferred", "")
+				val allTitles = LinkedHashSet<String>()
+				if (userPreferred.isNotEmpty()) allTitles.add(userPreferred)
+				titleObj.getStringOrNull("english")?.let { if (it.isNotEmpty()) allTitles.add(it) }
+				titleObj.getStringOrNull("romaji")?.let { if (it.isNotEmpty()) allTitles.add(it) }
+				titleObj.getStringOrNull("native")?.let { if (it.isNotEmpty()) allTitles.add(it) }
+				val synonymsArr = media.optJSONArray("synonyms")
+				if (synonymsArr != null) {
+					for (s in 0 until synonymsArr.length()) {
+						val syn = synonymsArr.optString(s, "").trim()
+						if (syn.isNotEmpty()) allTitles.add(syn)
+					}
+				}
+
+				val coverObj = media.optJSONObject("coverImage")
+				val coverUrl = coverObj?.getStringOrNull("large") ?: coverObj?.getStringOrNull("medium")
+				val totalChapters = if (media.has("chapters") && !media.isNull("chapters")) {
+					media.getInt("chapters")
+				} else {
+					null
+				}
+				val rawScore = entry.optDouble("score", 0.0).toFloat()
+				val format = media.getStringOrNull("format")
+				val updatedAtMs = AniListTimestampMapper.resolveTimestamp(entry)
+
+				result.add(
+					AniListMediaEntry(
+						entryId = entry.getInt("id"),
+						mediaId = entry.getLong("mediaId"),
+						status = entry.optString("status", "CURRENT"),
+						progress = entry.optInt("progress", 0),
+						score = scoreFormat.normalize(rawScore),
+						notes = entry.getStringOrNull("notes"),
+						preferredTitle = userPreferred,
+						allTitles = allTitles.toList(),
+						totalChapters = totalChapters,
+						coverUrl = coverUrl,
+						siteUrl = media.getStringOrNull("siteUrl"),
+						format = format,
+						updatedAt = updatedAtMs,
+						updatedAtSeconds = updatedAtSec,
+						isAdult = isAdult,
+					),
+				)
+			}
+
+			if (!hasNextPage) {
+				break
+			}
+			page++
+		}
+		return result.distinctBy { it.mediaId }
+	}
+
 	private suspend fun saveRate(json: JSONObject, mangaId: Long) {
 		val scoreFormat = ScoreFormat.of(storage[KEY_SCORE_FORMAT])
 		val entity = ScrobblingEntity(
@@ -268,14 +553,44 @@ class AniListRepository @Inject constructor(
 		val request = Request.Builder()
 			.post(requestBody)
 			.url(ENDPOINT)
-		val json = okHttp.newCall(request.build()).await().parseJson()
-		json.optJSONArray("errors")?.let {
-			if (it.length() != 0) {
-				throw GraphQLException(it)
+		var attempts = 0
+		while (true) {
+			attempts++
+			val response = okHttp.newCall(request.build()).await()
+			if (response.code == 401 || response.code == 403) {
+				throw AniListAuthExpiredException("AniList authorization expired (HTTP ${response.code})")
 			}
+			if (response.code == 429 && attempts <= 3) {
+				val retryAfterSeconds = response.header("Retry-After")?.toLongOrNull() ?: 5L
+				delay((retryAfterSeconds * 1000L).coerceIn(1000L, 60000L))
+				continue
+			}
+			val json = response.parseJson()
+			json.optJSONArray("errors")?.let {
+				if (it.length() != 0) {
+					for (e in 0 until it.length()) {
+						val errObj = it.optJSONObject(e)
+						val msg = errObj?.optString("message", "") ?: ""
+						val status = errObj?.optInt("status", 0) ?: 0
+						if (status == 401 || status == 403 ||
+							msg.contains("Invalid token", ignoreCase = true) ||
+							msg.contains("Unauthenticated", ignoreCase = true) ||
+							msg.contains("Unauthorized", ignoreCase = true)
+						) {
+							throw AniListAuthExpiredException("AniList authorization expired: $msg")
+						}
+					}
+					throw GraphQLException(it)
+				}
+			}
+			return json
 		}
-		return json
 	}
 
 	private fun String.shrink() = replace(shrinkRegex, " ")
 }
+
+open class AniListAuthExpiredException(
+	message: String = "AniList authorization expired. Please log in again.",
+	cause: Throwable? = null,
+) : java.io.IOException(message, cause)

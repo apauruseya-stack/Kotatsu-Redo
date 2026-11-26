@@ -18,9 +18,11 @@ import org.koitharu.kotatsu.core.prefs.ColorScheme
 import org.koitharu.kotatsu.core.ui.BasePreferenceFragment
 import org.koitharu.kotatsu.core.util.ext.addMenuProvider
 import org.koitharu.kotatsu.core.util.ext.getQuantityStringSafe
+import org.koitharu.kotatsu.core.util.ext.getThemeColor
 import org.koitharu.kotatsu.core.util.ext.observe
 import org.koitharu.kotatsu.settings.search.SettingsSearchMenuProvider
 import org.koitharu.kotatsu.settings.search.SettingsSearchViewModel
+import androidx.appcompat.R as appcompatR
 
 @AndroidEntryPoint
 class RootSettingsFragment : BasePreferenceFragment(0) {
@@ -41,7 +43,11 @@ class RootSettingsFragment : BasePreferenceFragment(0) {
 		bindPreferenceSummary("privacy", R.string.adult_content, R.string.app_security, R.string.your_activity)
 		bindPreferenceSummary("network", R.string.mobile_data, R.string.proxy, R.string.dns_over_https)
 		findPreference<Preference>("about")?.summary = getString(R.string.app_version, BuildConfig.VERSION_NAME)
-		applyExpressiveIconBackgrounds()
+		if (settings.isLiquidGlass) {
+			applyLiquidGlassIconBackgrounds()
+		} else {
+			applyExpressiveIconBackgrounds()
+		}
 	}
 
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -107,6 +113,66 @@ class RootSettingsFragment : BasePreferenceFragment(0) {
 				shape = GradientDrawable.OVAL
 				setColor(ContextCompat.getColor(context, backgroundColorRes))
 				setSize(size, size)
+			}
+			val foreground = DrawableCompat.wrap(icon.mutate()).also {
+				DrawableCompat.setTint(it, foregroundColor)
+			}
+			preference.icon = LayerDrawable(arrayOf(background, foreground)).apply {
+				setLayerInset(1, iconInset, iconInset, iconInset, iconInset)
+			}
+		}
+	}
+
+	private fun applyLiquidGlassIconBackgrounds() {
+		val context = requireContext()
+		val density = resources.displayMetrics.density
+		val size = (38f * density).toInt()
+		val iconInset = (9f * density).toInt()
+		val isNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+		val foregroundColor = if (isNight) {
+			ContextCompat.getColor(context, android.R.color.white)
+		} else {
+			context.getThemeColor(appcompatR.attr.colorPrimary)
+		}
+
+		val prefKeys = arrayOf(
+			"reader",
+			"appearance",
+			AppSettings.KEY_REMOTE_SOURCES,
+			AppSettings.KEY_SUGGESTIONS,
+			"tracker",
+			"downloads",
+			"userdata",
+			"accounts",
+			"notifications",
+			"privacy",
+			"network",
+			"about",
+		)
+
+		prefKeys.forEach { key ->
+			val preference = findPreference<Preference>(key) ?: return@forEach
+			val icon = preference.icon ?: return@forEach
+			val background = if (isNight) {
+				org.koitharu.kotatsu.core.ui.glass.GlassDrawable.create(
+					context = context,
+					cornerRadiusDp = 12f,
+					fillAlpha = 0.10f,
+					strokeAlpha = 0.22f,
+					rimAlpha = 0.60f,
+				).apply {
+					setBounds(0, 0, size, size)
+				}
+			} else {
+				org.koitharu.kotatsu.core.ui.glass.GlassDrawable.create(
+					context = context,
+					cornerRadiusDp = 12f,
+					fillAlpha = 0.65f,
+					strokeAlpha = 0.85f,
+					rimAlpha = 0.95f,
+				).apply {
+					setBounds(0, 0, size, size)
+				}
 			}
 			val foreground = DrawableCompat.wrap(icon.mutate()).also {
 				DrawableCompat.setTint(it, foregroundColor)

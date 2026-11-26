@@ -20,6 +20,7 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ReaderControl
+import org.koitharu.kotatsu.core.ui.glass.SpringPressHelper
 import org.koitharu.kotatsu.core.util.ext.hasVisibleChildren
 import org.koitharu.kotatsu.core.util.ext.isRtl
 import org.koitharu.kotatsu.core.util.ext.setContentDescriptionAndTooltip
@@ -260,6 +261,9 @@ class ReaderActionsView @JvmOverloads constructor(
 		setOnClickListener(this@ReaderActionsView)
 		setOnLongClickListener(this@ReaderActionsView)
 		setTooltipCompat(contentDescription)
+		if (settings.isLiquidGlass) {
+			SpringPressHelper.attach(this, targetScale = 0.90f)
+		}
 	}
 
 	private fun isAutoRotationEnabled(): Boolean = Settings.System.getInt(

@@ -5,6 +5,7 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
@@ -17,6 +18,7 @@ import androidx.annotation.MainThread
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.core.graphics.ColorUtils
 import androidx.core.graphics.Insets
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isGone
@@ -54,6 +56,7 @@ import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.prefs.AppSettings
+import org.koitharu.kotatsu.core.prefs.ReaderBackground
 import org.koitharu.kotatsu.core.prefs.ReaderMode
 import org.koitharu.kotatsu.core.ui.BaseFullscreenActivity
 import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
@@ -61,7 +64,9 @@ import org.koitharu.kotatsu.core.ui.dialog.setCheckbox
 import org.koitharu.kotatsu.core.ui.util.MenuInvalidator
 import org.koitharu.kotatsu.core.ui.widgets.ZoomControl
 import org.koitharu.kotatsu.core.util.IdlingDetector
+import org.koitharu.kotatsu.core.util.ext.getThemeColor
 import org.koitharu.kotatsu.core.util.ext.getThemeDimensionPixelOffset
+import com.google.android.material.R as materialR
 import org.koitharu.kotatsu.core.util.ext.hasGlobalPoint
 import org.koitharu.kotatsu.core.util.ext.isAnimationsEnabled
 import org.koitharu.kotatsu.core.util.ext.observe
@@ -221,6 +226,15 @@ class ReaderActivity :
         }
         viewModel.readerSettingsProducer.observe(this) {
             viewBinding.infoBar.applyColorScheme(isBlackOnWhite = it.background.isLight(this))
+            val bg = it.background.resolve(this)
+            window.setBackgroundDrawable(bg)
+            if (it.background == ReaderBackground.LIQUID_GLASS) {
+                viewBinding.root.background = null
+                viewBinding.container.background = null
+            } else {
+                viewBinding.root.background = it.background.resolve(this)
+                viewBinding.container.background = null
+            }
         }
         viewModel.isZoomControlsEnabled.observe(this) {
             viewBinding.zoomControl.isVisible = it
@@ -231,6 +245,26 @@ class ReaderActivity :
 
         // Apply initial double-mode considering foldable setting
         applyDoubleModeAuto()
+
+        if (settings.isLiquidGlass) {
+            val surfaceColor = getThemeColor(materialR.attr.colorSurface)
+            val darkSurface = ColorUtils.setAlphaComponent(surfaceColor, 235)
+            viewBinding.appbarTop.elevation = 0f
+            viewBinding.appbarTop.background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(darkSurface, ColorUtils.setAlphaComponent(darkSurface, 190), Color.TRANSPARENT),
+            )
+            viewBinding.toolbar.elevation = 0f
+            viewBinding.toolbar.background = null
+
+            viewBinding.toolbarDocked?.let { docked ->
+                docked.elevation = 0f
+                docked.background = GradientDrawable(
+                    GradientDrawable.Orientation.BOTTOM_TOP,
+                    intArrayOf(darkSurface, ColorUtils.setAlphaComponent(darkSurface, 205), Color.TRANSPARENT),
+                )
+            }
+        }
     }
 
     override fun getParentActivityIntent(): Intent? {

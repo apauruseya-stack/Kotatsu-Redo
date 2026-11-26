@@ -19,6 +19,30 @@
 			app:icon="@drawable/ic_anilist" />
 
 		<Preference
+			android:icon="@drawable/ic_sync"
+			android:key="anilist_import"
+			android:summary="@string/import_from_anilist_summary"
+			android:title="@string/import_from_anilist"
+			app:icon="@drawable/ic_sync" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			android:defaultValue="true"
+			android:key="anilist_sync_enabled"
+			android:summary="@string/pull_from_anilist_summary"
+			android:title="@string/pull_from_anilist" />
+
+		<Preference
+			android:dependency="anilist_sync_enabled"
+			android:key="anilist_sync_now"
+			android:summary="@string/anilist_sync_never"
+			android:title="@string/anilist_sync_now" />
+
+		<Preference
+			android:key="anilist_sync_log"
+			android:summary="@string/anilist_sync_log_summary"
+			android:title="@string/anilist_sync_log" />
+
+		<Preference
 			android:icon="@drawable/ic_kitsu"
 			android:key="kitsu"
 			android:summary="@string/loading_"

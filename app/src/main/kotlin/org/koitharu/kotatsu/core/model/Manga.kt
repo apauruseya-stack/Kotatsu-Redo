@@ -1,5 +1,6 @@
 package org.koitharu.kotatsu.core.model
 
+import android.content.Context
 import android.content.res.Resources
 import android.net.Uri
 import android.text.SpannableStringBuilder
@@ -254,3 +255,36 @@ fun Manga.withOverride(override: MangaOverride?) = if (override != null) {
 } else {
 	this
 }
+
+fun MangaChapter.formatChapterDisplayNumber(): String? {
+	numberString()?.let { if (it.isNotBlank()) return it }
+	if (number > 0f) {
+		return if (number == number.toLong().toFloat()) {
+			number.toLong().toString()
+		} else {
+			number.toString()
+		}
+	}
+	if (!title.isNullOrBlank()) {
+		return title
+	}
+	return null
+}
+
+fun MangaChapter.formatChapterPillLabel(context: Context): String? {
+	val chapterNum = formatChapterDisplayNumber() ?: return null
+	return if (chapterNum.startsWith("Ch.", ignoreCase = true) ||
+		chapterNum.startsWith("Chapter", ignoreCase = true)
+	) {
+		chapterNum
+	} else {
+		context.getString(R.string.chapter_number_short, chapterNum)
+	}
+}
+
+fun MangaChapter.formatContinueLabel(context: Context): String {
+	val base = context.getString(R.string._continue)
+	val displayNum = formatChapterDisplayNumber()
+	return if (displayNum.isNullOrEmpty()) base else "$base · $displayNum"
+}
+

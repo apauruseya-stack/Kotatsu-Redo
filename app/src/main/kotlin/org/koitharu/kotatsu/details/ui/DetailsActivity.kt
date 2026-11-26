@@ -25,10 +25,12 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.core.view.updatePaddingRelative
+import androidx.lifecycle.lifecycleScope
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.transition.TransitionManager
 import coil3.ImageLoader
 import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import coil3.request.allowRgb565
 import coil3.request.crossfade
 import coil3.request.lifecycle
@@ -39,6 +41,7 @@ import coil3.transform.RoundedCornersTransformation
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.chip.Chip
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.combine
@@ -46,6 +49,8 @@ import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.bookmarks.domain.Bookmark
 import org.koitharu.kotatsu.core.image.CoilMemoryCacheKey
@@ -62,6 +67,9 @@ import org.koitharu.kotatsu.core.parser.favicon.faviconUri
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.BaseActivity
 import org.koitharu.kotatsu.core.ui.BaseListAdapter
+import org.koitharu.kotatsu.core.ui.glass.CoverPaletteHelper
+import org.koitharu.kotatsu.core.ui.glass.SpringPressHelper
+import org.koitharu.kotatsu.core.util.ext.toBitmapOrNull
 import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
 import org.koitharu.kotatsu.core.ui.image.FaviconDrawable
 import org.koitharu.kotatsu.core.ui.image.TextDrawable
@@ -98,6 +106,7 @@ import org.koitharu.kotatsu.details.data.ReadingTime
 import org.koitharu.kotatsu.details.service.MangaPrefetchService
 import org.koitharu.kotatsu.details.ui.model.ChapterListItem
 import org.koitharu.kotatsu.details.ui.model.HistoryInfo
+import org.koitharu.kotatsu.details.ui.pager.ChaptersPagesViewModel
 import org.koitharu.kotatsu.details.ui.scrobbling.ScrobblingItemDecoration
 import org.koitharu.kotatsu.details.ui.scrobbling.ScrollingInfoAdapter
 import org.koitharu.kotatsu.download.ui.worker.DownloadStartedObserver
@@ -170,6 +179,9 @@ class DetailsActivity :
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
 		supportActionBar?.setDisplayShowTitleEnabled(false)
 		viewBinding.chipFavorite.setOnClickListener(this)
+		if (settings.isLiquidGlass) {
+			SpringPressHelper.attach(viewBinding.chipFavorite, targetScale = 0.94f)
+		}
 		infoBinding.textViewLocal.setOnClickListener(this)
 		infoBinding.textViewSource.setOnClickListener(this)
 		viewBinding.imageViewCover.setOnClickListener(this)
@@ -223,6 +235,7 @@ class DetailsActivity :
 		viewModel.remoteManga.observe(this, menuInvalidator)
 		viewModel.tags.observe(this, ::onTagsChanged)
 		viewModel.chapters.observe(this, PrefetchObserver(this))
+		viewModel.scanlatorPromptEvent.observeEvent(this, ::showScanlatorDialog)
 		viewModel.onDownloadStarted
 			.filterNot { appRouter.isChapterPagesSheetShown() }
 			.observeEvent(this, DownloadStartedObserver(viewBinding.scrollView))
@@ -530,12 +543,7 @@ class DetailsActivity :
 			else -> resources.getQuantityStringSafe(R.plurals.chapters, info.totalChapters, info.totalChapters)
 				.withEstimatedTime(info.estimatedTime)
 		}
-		textViewProgress.textAndVisible = if (info.percent <= 0f) {
-			null
-		} else {
-			val displayPercent = if (ReadingProgress.isCompleted(info.percent)) 100 else (info.percent * 100f).toInt()
-			getString(R.string.percent_string_pattern, displayPercent.toString())
-		}
+		textViewProgress.textAndVisible = ReadingProgress.formatPercent(info.percent, root.context)
 
 		progress.setProgressCompat(
 			(progress.max * info.percent.coerceIn(0f, 1f)).roundToInt(),
@@ -562,31 +570,67 @@ class DetailsActivity :
 			bgView.isVisible = false
 			return
 		}
-		val manga = viewModel.getMangaOrNull()
-		ImageRequest.Builder(this)
-			.data(imageUrl)
-			.lifecycle(this)
-			.crossfade(true)
-			.allowRgb565(true)
-			.target(ImageViewTarget(bgView))
-			.mangaSourceExtra(manga?.source)
-			.enqueueWith(coil)
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-			bgView.setRenderEffect(
-				RenderEffect.createBlurEffect(16f, 16f, Shader.TileMode.CLAMP),
-			)
-		}
 		val surfaceColor = getThemeColor(materialR.attr.colorSurface)
-		val halfAlpha = ColorUtils.setAlphaComponent(surfaceColor, 128)
-		bgView.foreground = GradientDrawable(
-			GradientDrawable.Orientation.TOP_BOTTOM,
-			intArrayOf(surfaceColor, halfAlpha, Color.TRANSPARENT, Color.TRANSPARENT, halfAlpha, surfaceColor),
-		)
+		val manga = viewModel.getMangaOrNull()
+
+		if (settings.isLiquidGlass) {
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+				bgView.setRenderEffect(null)
+			}
+			bgView.alpha = 1.0f
+			bgView.foreground = null
+			val cachedPalette = CoverPaletteHelper.getCached(imageUrl)
+			if (cachedPalette != null) {
+				bgView.background = cachedPalette.createAmbientHeroGradient(surfaceColor)
+				bgView.setImageDrawable(null)
+				bgView.isVisible = true
+			}
+			lifecycleScope.launch {
+				val bitmap = withContext(Dispatchers.IO) {
+					// Separate small request (112x112, hardware off) dedicated purely to Palette extraction
+					val req = ImageRequest.Builder(this@DetailsActivity)
+						.data(imageUrl)
+						.size(112, 112)
+						.mangaSourceExtra(manga?.source)
+						.allowRgb565(true)
+						.allowHardware(false)
+						.build()
+					coil.execute(req).toBitmapOrNull()
+				}
+				if (bitmap != null) {
+					val palette = CoverPaletteHelper.extract(imageUrl, bitmap)
+					bgView.background = palette.createAmbientHeroGradient(surfaceColor)
+					bgView.setImageDrawable(null)
+					bgView.isVisible = true
+				}
+			}
+		} else {
+			bgView.background = null
+			bgView.alpha = 0.25f
+			ImageRequest.Builder(this)
+				.data(imageUrl)
+				.lifecycle(this)
+				.crossfade(true)
+				.allowRgb565(true)
+				.target(ImageViewTarget(bgView))
+				.mangaSourceExtra(manga?.source)
+				.enqueueWith(coil)
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+				bgView.setRenderEffect(
+					RenderEffect.createBlurEffect(16f, 16f, Shader.TileMode.CLAMP),
+				)
+			}
+			val halfAlpha = ColorUtils.setAlphaComponent(surfaceColor, 128)
+			bgView.foreground = GradientDrawable(
+				GradientDrawable.Orientation.TOP_BOTTOM,
+				intArrayOf(surfaceColor, halfAlpha, Color.TRANSPARENT, Color.TRANSPARENT, halfAlpha, surfaceColor),
+			)
+			bgView.isVisible = true
+		}
 		configureTransparentAppBar()
 		viewBinding.scrollView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
 			bgView.translationY = -scrollY.toFloat()
 		}
-		bgView.isVisible = true
 	}
 
 	private fun configureTransparentAppBar() {
@@ -747,4 +791,34 @@ class DetailsActivity :
 		}
 	}
 
+	private fun showScanlatorDialog(data: ChaptersPagesViewModel.ScanlatorPromptData) {
+		val scanlators = data.scanlators
+		if (scanlators.isEmpty()) return
+
+		val displayItems = scanlators.map { name ->
+			if (org.koitharu.kotatsu.details.domain.ScanlatorPriorities.isAsuraOrOfficial(name)) {
+				"$name (${getString(R.string.recommended)})"
+			} else {
+				name
+			}
+		}.toTypedArray()
+
+		var selectedIndex = scanlators.indexOfFirst { it.equals(data.defaultSelection, ignoreCase = true) }
+		if (selectedIndex < 0) selectedIndex = 0
+
+		buildAlertDialog(this) {
+			setTitle(R.string.select_default_scanlator)
+			setSingleChoiceItems(displayItems, selectedIndex) { _, which ->
+				selectedIndex = which
+			}
+			setPositiveButton(android.R.string.ok) { dialog, _ ->
+				if (selectedIndex in scanlators.indices) {
+					val chosen = scanlators[selectedIndex]
+					viewModel.setPreferredScanlator(chosen)
+				}
+				dialog.dismiss()
+			}
+			setNegativeButton(android.R.string.cancel, null)
+		}.show()
+	}
 }

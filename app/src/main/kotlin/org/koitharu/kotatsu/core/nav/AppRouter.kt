@@ -108,6 +108,7 @@ import org.koitharu.kotatsu.settings.tracker.categories.TrackerCategoriesConfigS
 import org.koitharu.kotatsu.stats.ui.StatsActivity
 import org.koitharu.kotatsu.stats.ui.sheet.MangaStatsSheet
 import org.koitharu.kotatsu.suggestions.ui.SuggestionsActivity
+import org.koitharu.kotatsu.tracker.ui.feed.FeedActivity
 import org.koitharu.kotatsu.tracker.ui.updates.UpdatesActivity
 import java.io.File
 import androidx.appcompat.R as appcompatR
@@ -278,6 +279,8 @@ class AppRouter private constructor(
     }
 
     fun openSettings() = startActivity(SettingsActivity::class.java)
+
+    fun openFeed() = startActivity(FeedActivity::class.java)
 
     fun openReaderSettings() {
         startActivity(readerSettingsIntent(contextOrNull() ?: return))

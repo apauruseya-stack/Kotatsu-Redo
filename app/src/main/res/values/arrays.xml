@@ -68,6 +68,7 @@
 		<item>@string/color_dark</item>
 		<item>@string/color_white</item>
 		<item>@string/color_black</item>
+		<item>@string/color_liquid_glass</item>
 	</string-array>
 	<string-array name="reader_animation" translatable="false">
 		<item>@string/disabled</item>

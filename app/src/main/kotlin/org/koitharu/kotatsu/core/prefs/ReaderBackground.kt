@@ -6,6 +6,7 @@ import android.view.ContextThemeWrapper
 import androidx.annotation.Keep
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
+import org.koitharu.kotatsu.core.ui.glass.LivingWallpaperDrawable
 import org.koitharu.kotatsu.core.util.ext.getThemeDrawable
 import org.koitharu.kotatsu.core.util.ext.isNightMode
 import com.google.android.material.R as materialR
@@ -13,7 +14,7 @@ import com.google.android.material.R as materialR
 @Keep
 enum class ReaderBackground {
 
-	DEFAULT, LIGHT, DARK, WHITE, BLACK;
+	DEFAULT, LIGHT, DARK, WHITE, BLACK, LIQUID_GLASS;
 
 	fun resolve(context: Context): Drawable? = when (this) {
 		DEFAULT -> context.getThemeDrawable(android.R.attr.windowBackground)
@@ -25,6 +26,7 @@ enum class ReaderBackground {
 
 		WHITE -> ContextCompat.getColor(context, android.R.color.white).toDrawable()
 		BLACK -> ContextCompat.getColor(context, android.R.color.black).toDrawable()
+		LIQUID_GLASS -> LivingWallpaperDrawable.createNebula(context.resources.isNightMode)
 	}
 
 	fun isLight(context: Context): Boolean = when (this) {
@@ -35,5 +37,7 @@ enum class ReaderBackground {
 
 		DARK,
 		BLACK -> false
+
+		LIQUID_GLASS -> !context.resources.isNightMode
 	}
 }

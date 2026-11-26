@@ -38,6 +38,7 @@ import org.koitharu.kotatsu.scrobbling.common.domain.Scrobbler
 import org.koitharu.kotatsu.scrobbling.common.domain.tryScrobble
 import org.koitharu.kotatsu.search.domain.SearchKind
 import org.koitharu.kotatsu.tracker.domain.CheckNewChaptersUseCase
+import org.koitharu.kotatsu.tracker.domain.TrackingRepository
 import kotlin.math.abs
 import kotlin.math.ceil
 import javax.inject.Inject
@@ -51,6 +52,7 @@ class HistoryRepository @Inject constructor(
 	private val mangaRepository: MangaDataRepository,
 	private val localObserver: HistoryLocalObserver,
 	private val newChaptersUseCaseProvider: Provider<CheckNewChaptersUseCase>,
+	private val trackingRepositoryProvider: Provider<TrackingRepository>,
 ) {
 
 	suspend fun getList(offset: Int, limit: Int): List<Manga> {
@@ -104,16 +106,24 @@ class HistoryRepository @Inject constructor(
 		filterOptions: Set<ListFilterOption>,
 		limit: Int,
 		searchQuery: String = "",
+		maxPercent: Float? = null,
 	): Flow<List<MangaWithHistory>> {
 		if (ListFilterOption.Downloaded in filterOptions) {
 			// The on-device observer reads the filesystem index rather than the history table, so it
 			// cannot apply a SQL predicate; narrow its results in memory instead.
 			val downloaded = localObserver.observeAll(order, filterOptions, limit)
-			return if (searchQuery.isEmpty()) downloaded else downloaded.map { list ->
-				list.filter { it.manga.title.contains(searchQuery, ignoreCase = true) }
+			return downloaded.map { list ->
+				var result = list
+				if (searchQuery.isNotEmpty()) {
+					result = result.filter { it.manga.title.contains(searchQuery, ignoreCase = true) }
+				}
+				if (maxPercent != null) {
+					result = result.filter { it.history.percent < maxPercent }
+				}
+				result
 			}
 		}
-		return db.getHistoryDao().observeAll(order, filterOptions, limit, searchQuery).mapItems {
+		return db.getHistoryDao().observeAll(order, filterOptions, limit, searchQuery, maxPercent).mapItems {
 			MangaWithHistory(
 				it.toManga(),
 				it.history.toMangaHistory(),
@@ -188,13 +198,19 @@ class HistoryRepository @Inject constructor(
 		).takeIf { it.isValid() }
 	}
 
-	suspend fun clear() {
+	suspend fun clear() = db.withTransaction {
 		db.getHistoryDao().clear()
+		if (settings.isLiquidGlass) {
+			trackingRepositoryProvider.get().resetAllTrackingAnchorsOnHistoryCleared()
+		}
 	}
 
 	suspend fun delete(manga: Manga) = db.withTransaction {
 		HistoryWriteLog.deleted(manga.title, manga.id, "delete(manga)")
 		db.getHistoryDao().delete(manga.id)
+		if (settings.isLiquidGlass) {
+			trackingRepositoryProvider.get().resetTrackingAnchorOnHistoryDeleted(manga.id)
+		}
 		mangaRepository.gcChaptersCache()
 	}
 
@@ -213,6 +229,9 @@ class HistoryRepository @Inject constructor(
 			for (id in ids) {
 				HistoryWriteLog.deleted(null, id, "delete(ids), ${ids.size} total")
 				db.getHistoryDao().delete(id)
+			}
+			if (settings.isLiquidGlass) {
+				trackingRepositoryProvider.get().resetTrackingAnchorsOnHistoryDeleted(ids)
 			}
 			mangaRepository.gcChaptersCache()
 		}

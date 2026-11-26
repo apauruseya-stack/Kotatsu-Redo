@@ -85,6 +85,7 @@ abstract class BasePageHolder<B : ViewBinding>(
 		private set
 
 	init {
+		settings.applyBackground(itemView)
 		lifecycleScope.launch(Dispatchers.Main) {
 			ssiv.bindToLifecycle(this@BasePageHolder)
 			ssiv.isEagerLoadingEnabled = !context.isLowRamDevice()

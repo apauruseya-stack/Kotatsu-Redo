@@ -59,7 +59,9 @@ class FloatingBottomNavigationView @JvmOverloads constructor(
 	private val legacyBackground: Drawable = ColorDrawable(context.getThemeColor(materialR.attr.colorSurfaceContainer))
 	private val legacyElevation = elevation
 	private var useLegacyNavigation = false
-	private var reselectedListener: ((MenuItem) -> Unit)? = null
+	private var itemSelectedCallback: ((MenuItem) -> Boolean)? = null
+	private var itemReselectedCallback: ((MenuItem) -> Unit)? = null
+	private val isLiquidGlassState = MutableStateFlow(false)
 
 	private val composeView: ComposeView = ComposeView(context).apply {
 		setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
@@ -70,10 +72,11 @@ class FloatingBottomNavigationView @JvmOverloads constructor(
 				val labeled by labeledState.collectAsState()
 				val navColors by navColorsState.collectAsState()
 				val showContinue by continueVisibleState.collectAsState()
+				val isLiquidGlass by isLiquidGlassState.collectAsState()
 				Box(
 					modifier = Modifier
 						.fillMaxWidth()
-						.padding(horizontal = 12.dp, vertical = 8.dp),
+						.padding(horizontal = 16.dp, vertical = 6.dp),
 					contentAlignment = Alignment.Center,
 				) {
 					FloatingNavBar(
@@ -81,10 +84,16 @@ class FloatingBottomNavigationView @JvmOverloads constructor(
 						selectedId = selectedId,
 						showLabels = labeled,
 						colors = navColors,
-						onItemSelected = { id -> this@FloatingBottomNavigationView.selectedItemId = id },
+						isLiquidGlass = isLiquidGlass,
+						onItemSelected = { id ->
+							val menuItem = menu.findItem(id)
+							if (menuItem != null && itemSelectedCallback?.invoke(menuItem) == true) {
+								this@FloatingBottomNavigationView.selectedItemId = id
+							}
+						},
 						onItemReselected = { id ->
 							val menuItem = menu.findItem(id) ?: return@FloatingNavBar
-							reselectedListener?.invoke(menuItem)
+							itemReselectedCallback?.invoke(menuItem)
 						},
 						modifier = Modifier.fillMaxWidth(),
 						showContinue = showContinue,
@@ -122,13 +131,22 @@ class FloatingBottomNavigationView @JvmOverloads constructor(
 		if (useLegacyNavigation) super.onTouchEvent(event) else false
 
 	override fun setSelectedItemId(@IdRes itemId: Int) {
+		val menuItem = menu.findItem(itemId)
+		if (menuItem != null && itemSelectedCallback?.invoke(menuItem) == false) {
+			return
+		}
 		super.setSelectedItemId(itemId)
 		selectedIdState.value = selectedItemId
 	}
 
+	override fun setOnItemSelectedListener(listener: OnItemSelectedListener?) {
+		super.setOnItemSelectedListener(listener)
+		itemSelectedCallback = listener?.let { l -> { item: MenuItem -> l.onNavigationItemSelected(item) } }
+	}
+
 	override fun setOnItemReselectedListener(listener: OnItemReselectedListener?) {
 		super.setOnItemReselectedListener(listener)
-		reselectedListener = listener?.let { l -> { item -> l.onNavigationItemReselected(item) } }
+		itemReselectedCallback = listener?.let { l -> { item: MenuItem -> l.onNavigationItemReselected(item) } }
 	}
 
 	/** Items configured in settings. At most [MAX_RENDERED_ITEMS] are drawn. */
@@ -140,6 +158,10 @@ class FloatingBottomNavigationView @JvmOverloads constructor(
 
 	fun setComposeLabeled(value: Boolean) {
 		labeledState.value = value
+	}
+
+	fun setLiquidGlass(value: Boolean) {
+		isLiquidGlassState.value = value
 	}
 
 	/** The round "continue reading" button beside the bar. Ignored while in legacy mode. */

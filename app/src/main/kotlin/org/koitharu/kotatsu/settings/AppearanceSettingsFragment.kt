@@ -29,6 +29,9 @@ import org.koitharu.kotatsu.core.util.ext.toList
 import org.koitharu.kotatsu.parsers.util.mapToSet
 import org.koitharu.kotatsu.parsers.util.names
 import org.koitharu.kotatsu.parsers.util.toTitleCase
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.settings.utils.ActivityListPreference
 import org.koitharu.kotatsu.settings.utils.MultiSummaryProvider
 import org.koitharu.kotatsu.settings.utils.PercentSummaryProvider
@@ -45,6 +48,12 @@ class AppearanceSettingsFragment :
 
     @Inject
     lateinit var appShortcutManager: AppShortcutManager
+
+    @Inject
+    lateinit var favouritesRepository: FavouritesRepository
+
+    @Inject
+    lateinit var trackingRepository: org.koitharu.kotatsu.tracker.domain.TrackingRepository
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.pref_appearance)
@@ -88,6 +97,15 @@ class AppearanceSettingsFragment :
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         settings.subscribe(this)
+        viewLifecycleOwner.lifecycleScope.launch {
+            favouritesRepository.observeCategoriesForLibrary().collect { categories ->
+                findPreference<MultiSelectListPreference>(AppSettings.KEY_NEW_CHAPTERS_CATEGORIES)?.run {
+                    entries = categories.map { it.title }.toTypedArray()
+                    entryValues = categories.map { it.id.toString() }.toTypedArray()
+                    summaryProvider = MultiSummaryProvider(R.string.all_categories)
+                }
+            }
+        }
     }
 
     override fun onDestroyView() {
@@ -105,6 +123,13 @@ class AppearanceSettingsFragment :
             AppSettings.KEY_THEME_AMOLED,
                 -> {
                 postRestart()
+            }
+
+            AppSettings.KEY_LIQUID_GLASS -> {
+                viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    trackingRepository.onLiquidGlassToggled(settings.isLiquidGlass)
+                    postRestart()
+                }
             }
 
             AppSettings.KEY_APP_LOCALE -> {

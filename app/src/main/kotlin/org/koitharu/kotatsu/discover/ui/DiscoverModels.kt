@@ -1,5 +1,6 @@
 package org.koitharu.kotatsu.discover.ui
 
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.discover.domain.DiscoverFilter
@@ -30,9 +31,16 @@ data class DiscoverRowItem(
 	val titleText: String? = null,
 	/** What goes in [title], for a row that says why it is there. */
 	val titleArgument: String? = null,
+	@DrawableRes val icon: Int = 0,
+	val opensFeed: Boolean = false,
 ) : ListModel {
 	override fun areItemsTheSame(other: ListModel) =
-		other is DiscoverRowItem && other.title == title && other.titleText == titleText && other.titleArgument == titleArgument
+		other is DiscoverRowItem &&
+			other.title == title &&
+			other.titleText == titleText &&
+			other.titleArgument == titleArgument &&
+			other.icon == icon &&
+			other.opensFeed == opensFeed
 }
 
 data class DiscoverRankedManga(

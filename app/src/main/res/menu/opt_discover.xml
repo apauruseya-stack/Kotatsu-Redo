@@ -23,4 +23,10 @@
 		android:title="@string/show_dismissed"
 		app:showAsAction="never" />
 
+	<item
+		android:id="@+id/action_feed"
+		android:icon="@drawable/ic_feed"
+		android:title="@string/feed"
+		app:showAsAction="never" />
+
 </menu>

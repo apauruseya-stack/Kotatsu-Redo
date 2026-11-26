@@ -1,5 +1,7 @@
 package org.koitharu.kotatsu.list.domain
 
+import android.content.Context
+import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.prefs.ProgressIndicatorMode
 import org.koitharu.kotatsu.core.prefs.ProgressIndicatorMode.CHAPTERS_LEFT
 import org.koitharu.kotatsu.core.prefs.ProgressIndicatorMode.CHAPTERS_READ
@@ -49,6 +51,16 @@ data class ReadingProgress(
 			if (isCompleted(percent)) "100" else (percent * 100f).toInt().toString()
 		} else {
 			"0"
+		}
+
+		fun formatPercent(percent: Float, context: Context): String? {
+			if (!isValid(percent) || percent <= 0f) return null
+			return context.getString(R.string.percent_string_pattern, percentToString(percent))
+		}
+
+		fun formatPercentInt(percent: Float): Int {
+			if (!isValid(percent)) return 0
+			return if (isCompleted(percent)) 100 else (percent * 100f).toInt().coerceIn(0, 100)
 		}
 	}
 }

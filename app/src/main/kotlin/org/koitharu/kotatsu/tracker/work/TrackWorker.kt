@@ -70,6 +70,7 @@ import org.koitharu.kotatsu.settings.work.PeriodicWorkScheduler
 import org.koitharu.kotatsu.tracker.domain.CheckNewChaptersUseCase
 import org.koitharu.kotatsu.tracker.domain.GetTracksUseCase
 import org.koitharu.kotatsu.tracker.domain.StaleTracksUseCase
+import org.koitharu.kotatsu.tracker.domain.TrackingRepository
 import org.koitharu.kotatsu.tracker.domain.model.MangaTracking
 import org.koitharu.kotatsu.tracker.domain.model.MangaUpdates
 import org.koitharu.kotatsu.tracker.work.TrackerNotificationHelper.NotificationInfo
@@ -97,6 +98,7 @@ class TrackWorker @AssistedInject constructor(
 	private val storageManagerLazy: Lazy<LocalStorageManager>,
 	private val mangaDataRepositoryLazy: Lazy<MangaDataRepository>,
 	private val staleTracksUseCaseLazy: Lazy<StaleTracksUseCase>,
+	private val trackingRepositoryLazy: Lazy<TrackingRepository>,
 ) : CoroutineWorker(context, workerParams) {
 
 	private val notificationManager by lazy { NotificationManagerCompat.from(applicationContext) }
@@ -228,10 +230,31 @@ class TrackWorker @AssistedInject constructor(
 			when (it) {
 				is MangaUpdates.Failure -> null
 				is MangaUpdates.Success -> if (it.isValid && it.isNotEmpty()) {
-					notificationHelper.createNotification(
-						manga = it.manga,
-						newChapters = it.newChapters,
-					)
+					val shouldNotify = if (settings.isLiquidGlass) {
+						val anchor = trackingRepositoryLazy.get().getAnchor(it.manga.id)
+						(anchor?.newReleasesCount ?: 0) > 0
+					} else {
+						true
+					}
+					if (shouldNotify) {
+						val newChaptersToNotify = if (settings.isLiquidGlass) {
+							val anchor = trackingRepositoryLazy.get().getAnchor(it.manga.id)
+							val snapshotNum = anchor?.latestNumberAtLastRead
+							if (snapshotNum != null && snapshotNum > 0f) {
+								it.newChapters.filter { ch -> ch.number > snapshotNum }.ifEmpty { it.newChapters }
+							} else {
+								it.newChapters
+							}
+						} else {
+							it.newChapters
+						}
+						notificationHelper.createNotification(
+							manga = it.manga,
+							newChapters = newChaptersToNotify,
+						)
+					} else {
+						null
+					}
 				} else {
 					null
 				}

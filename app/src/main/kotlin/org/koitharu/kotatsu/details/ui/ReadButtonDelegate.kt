@@ -22,9 +22,11 @@ import com.google.android.material.button.MaterialSplitButton
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.flow.combine
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.formatContinueLabel
 import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.ReaderIntent
+import org.koitharu.kotatsu.core.ui.glass.SpringPressHelper
 import org.koitharu.kotatsu.core.util.ext.getThemeColor
 import org.koitharu.kotatsu.core.util.ext.getThemeResId
 import org.koitharu.kotatsu.core.util.ext.observe
@@ -80,6 +82,10 @@ class ReadButtonDelegate(
 	fun attach(lifecycleOwner: LifecycleOwner) {
 		buttonRead.setOnClickListener(this)
 		buttonMenu.setOnClickListener(this)
+		if (viewModel.settings.isLiquidGlass) {
+			SpringPressHelper.attach(buttonRead, targetScale = 0.96f)
+			SpringPressHelper.attach(buttonMenu, targetScale = 0.92f)
+		}
 		combine(viewModel.isLoading, viewModel.historyInfo, ::Pair)
 			.observe(lifecycleOwner) { (isLoading, historyInfo) ->
 				onHistoryChanged(isLoading, historyInfo)
@@ -149,13 +155,11 @@ class ReadButtonDelegate(
 	}
 
 	private fun getContinueLabel(info: HistoryInfo): CharSequence {
-		val base = context.getString(R.string._continue)
-		val chapterNumber = viewModel.getMangaOrNull()
+		val chapter = viewModel.getMangaOrNull()
 			?.chapters
 			?.filter { it.branch == viewModel.selectedBranchValue }
 			?.getOrNull(info.currentChapter)
-			?.numberString()
-		return if (chapterNumber.isNullOrEmpty()) base else "$base · $chapterNumber"
+		return chapter?.formatContinueLabel(context) ?: context.getString(R.string._continue)
 	}
 
 	private fun Menu.populateBranchList() {

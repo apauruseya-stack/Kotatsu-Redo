@@ -51,8 +51,7 @@
 		android:backupAgent="org.koitharu.kotatsu.backups.domain.AppBackupAgent"
 		android:dataExtractionRules="@xml/backup_rules"
 		android:enableOnBackInvokedCallback="@bool/is_predictive_back_enabled"
-		android:extractNativeLibs="true"
-		android:fullBackupContent="@xml/backup_content"
+        android:fullBackupContent="@xml/backup_content"
 		android:fullBackupOnly="true"
 		android:hasFragileUserData="true"
 		android:restoreAnyVersion="true"
@@ -172,6 +171,9 @@
 		<activity
 			android:name="org.koitharu.kotatsu.tracker.ui.updates.UpdatesActivity"
 			android:label="@string/updates" />
+		<activity
+			android:name="org.koitharu.kotatsu.tracker.ui.feed.FeedActivity"
+			android:label="@string/feed" />
 		<activity
 			android:name="org.koitharu.kotatsu.favourites.ui.FavouritesActivity"
 			android:label="@string/favourites" />

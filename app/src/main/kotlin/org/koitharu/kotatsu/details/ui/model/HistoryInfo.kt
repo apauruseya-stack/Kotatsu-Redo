@@ -40,7 +40,28 @@ fun HistoryInfo(
 		manga?.chapters?.get(branch)
 	}
 	val currentChapter = if (history != null && !chapters.isNullOrEmpty()) {
-		chapters.indexOfFirst { it.id == history.chapterId }
+		val directIndex = chapters.indexOfFirst { it.id == history.chapterId }
+		if (directIndex >= 0) {
+			directIndex
+		} else {
+			val historyChapter = manga?.allChapters?.find { it.id == history.chapterId }
+			if (historyChapter != null) {
+				if (historyChapter.number > 0f) {
+					val numIndex = chapters.indexOfFirst { it.number == historyChapter.number }
+					if (numIndex >= 0) {
+						numIndex
+					} else {
+						chapters.indexOfLast { it.number > 0f && it.number <= historyChapter.number }
+					}
+				} else if (!historyChapter.title.isNullOrEmpty()) {
+					chapters.indexOfFirst { it.title == historyChapter.title }
+				} else {
+					-1
+				}
+			} else {
+				-1
+			}
+		}
 	} else {
 		-2
 	}

@@ -45,6 +45,7 @@ import org.koitharu.kotatsu.list.ui.model.TipModel
 import org.koitharu.kotatsu.parsers.model.ContentType
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.ParserMangaSource
+import org.koitharu.kotatsu.tracker.domain.TrackingRepository
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -52,6 +53,7 @@ import javax.inject.Inject
 @HiltViewModel
 class DiscoverViewModel @Inject constructor(
 	private val repository: DiscoverRepository,
+	private val trackingRepository: TrackingRepository,
 	private val mapper: MangaListMapper,
 	dismissals: DiscoverDismissals,
 	private val dismisser: MangaDismisser,
@@ -159,6 +161,23 @@ class DiscoverViewModel @Inject constructor(
 		}
 		.shared()
 
+	private val feedUpdates: Flow<List<Manga>> = combine(refreshes, returns, ::Pair)
+		.flatMapLatest {
+			if (settings.isTrackerEnabled) {
+				trackingRepository.observeTrackingLog(ROW_SIZE, emptySet())
+					.map { logs -> logs.map { it.manga }.distinctBy { it.id } }
+			} else {
+				flowOf(emptyList())
+			}
+		}
+		.shared()
+
+	private val unreadFeedCount: Flow<Int> = if (settings.isTrackerEnabled) {
+		trackingRepository.observeUnreadUpdatesCount()
+	} else {
+		flowOf(0)
+	}
+
 	private val genres: Flow<List<String>> = refreshes
 		.flatMapLatest { flow { emit(repository.getGenres()) } }
 		.onStart { emit(emptyList()) }
@@ -184,9 +203,9 @@ class DiscoverViewModel @Inject constructor(
 		combine(filter, hasSources, dismissed, profile, isTipOpen, ::ForYouSetting),
 		forYou,
 		newFinds,
-		combine(categoryRows, likeRows, ::Pair),
-	) { setting, forYou, finds, (rows, likes) ->
-		ForYouSnapshot(setting, forYou, finds, rows, likes)
+		combine(categoryRows, likeRows, feedUpdates, unreadFeedCount) { r, l, f, u -> ForYouFeeds(r, l, f, u) },
+	) { setting, forYou, finds, feeds ->
+		ForYouSnapshot(setting, forYou, finds, feeds.rows, feeds.likes, feeds.feed, feeds.unreadCount)
 	}
 		// Answers come in bursts, and drawing all of it for each is the slowest thing on this screen
 		.debounce { if (it.isSettled) 0L else REDRAW_DELAY_MS }
@@ -297,6 +316,24 @@ class DiscoverViewModel @Inject constructor(
 					items = recommended.toModels(),
 					isLoading = false,
 					opensSuggestions = forYou.isNotEmpty(),
+				),
+			)
+		}
+		val feed = snapshot.feed
+		if (feed.isNotEmpty()) {
+			val feedRow = feed.take(ROW_SIZE)
+			feedRow.mapTo(shown) { DiscoverRanking.titleKey(it.title) }
+			val unread = snapshot.unreadCount
+			val titleText = if (unread > 99) "Feed (99+)" else if (unread > 0) "Feed ($unread)" else null
+			add(
+				DiscoverRowItem(
+					title = R.string.feed,
+					titleText = titleText,
+					items = feedRow.toModels(),
+					isLoading = false,
+					opensSuggestions = false,
+					opensFeed = true,
+					icon = R.drawable.ic_feed,
 				),
 			)
 		}
@@ -417,12 +454,21 @@ class DiscoverViewModel @Inject constructor(
 		val showTip: Boolean,
 	)
 
+	private class ForYouFeeds(
+		val rows: List<Pair<ReaderCategory, DiscoverSection>>,
+		val likes: List<Pair<Manga, DiscoverSection>>,
+		val feed: List<Manga>,
+		val unreadCount: Int,
+	)
+
 	private class ForYouSnapshot(
 		val setting: ForYouSetting,
 		val forYou: List<Manga>,
 		val finds: DiscoverSection,
 		val rows: List<Pair<ReaderCategory, DiscoverSection>>,
 		val likes: List<Pair<Manga, DiscoverSection>>,
+		val feed: List<Manga> = emptyList(),
+		val unreadCount: Int = 0,
 	) {
 		/** Nothing more is on its way, so this is worth drawing right away. */
 		val isSettled: Boolean

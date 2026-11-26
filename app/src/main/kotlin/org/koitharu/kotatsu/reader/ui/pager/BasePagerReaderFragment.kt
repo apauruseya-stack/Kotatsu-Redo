@@ -87,6 +87,10 @@ abstract class BasePagerReaderFragment : BaseReaderFragment<FragmentReaderPagerB
 				}
 			}
 		}
+
+		viewModel.readerSettingsProducer.observe(viewLifecycleOwner) {
+			it.applyBackground(binding.root)
+		}
 	}
 
 	override fun onDestroyView() {

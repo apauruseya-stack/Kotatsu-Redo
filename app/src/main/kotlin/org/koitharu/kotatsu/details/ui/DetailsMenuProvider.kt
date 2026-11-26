@@ -52,6 +52,13 @@ class DetailsMenuProvider(
 		menu.findItem(R.id.action_scrobbling).isVisible = viewModel.isScrobblingAvailable
 		menu.findItem(R.id.action_online).isVisible = viewModel.remoteManga.value != null
 		menu.findItem(R.id.action_stats).isVisible = viewModel.isStatsAvailable.value
+		menu.findItem(R.id.action_scanlator)?.let { item ->
+			val chapters = viewModel.mangaDetails.value?.allChapters.orEmpty()
+			val distinctScanlators = chapters.mapNotNull { it.scanlator?.trim() }
+				.filter { it.isNotBlank() }
+				.distinct()
+			item.isVisible = distinctScanlators.size > 1
+		}
 		// Only for what the reader has no stake in yet: saving or reading it already says they are interested
 		menu.findItem(R.id.action_not_interested).isVisible = manga != null &&
 			viewModel.favouriteCategories.value.isEmpty() && viewModel.history.value == null &&
@@ -104,6 +111,10 @@ class DetailsMenuProvider(
 
 			R.id.action_scrobbling -> {
 				router.showScrobblingSelectorSheet(manga, null)
+			}
+
+			R.id.action_scanlator -> {
+				viewModel.requestScanlatorSelection()
 			}
 
 			R.id.action_not_interested -> {

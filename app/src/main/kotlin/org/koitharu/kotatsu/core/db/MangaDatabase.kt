@@ -44,6 +44,7 @@ import org.koitharu.kotatsu.core.db.migrations.Migration24To25
 import org.koitharu.kotatsu.core.db.migrations.Migration25To26
 import org.koitharu.kotatsu.core.db.migrations.Migration26To27
 import org.koitharu.kotatsu.core.db.migrations.Migration27To28
+import org.koitharu.kotatsu.core.db.migrations.Migration28To29
 import org.koitharu.kotatsu.core.db.migrations.Migration2To3
 import org.koitharu.kotatsu.core.db.migrations.Migration3To4
 import org.koitharu.kotatsu.core.db.migrations.Migration4To5
@@ -72,8 +73,10 @@ import org.koitharu.kotatsu.suggestions.data.SuggestionEntity
 import org.koitharu.kotatsu.tracker.data.TrackEntity
 import org.koitharu.kotatsu.tracker.data.TrackLogEntity
 import org.koitharu.kotatsu.tracker.data.TracksDao
+import org.koitharu.kotatsu.tracker.data.TrackingAnchorEntity
+import org.koitharu.kotatsu.tracker.data.TrackingAnchorsDao
 
-const val DATABASE_VERSION = 28
+const val DATABASE_VERSION = 29
 
 @Database(
 	entities = [
@@ -81,9 +84,10 @@ const val DATABASE_VERSION = 28
 		FavouriteCategoryEntity::class, FavouriteEntity::class, MangaPrefsEntity::class, TrackEntity::class,
 		TrackLogEntity::class, SuggestionEntity::class, BookmarkEntity::class, ScrobblingEntity::class,
 		MangaSourceEntity::class, StatsEntity::class, LocalMangaIndexEntity::class,
-		SourcePresetEntity::class,
+		SourcePresetEntity::class, TrackingAnchorEntity::class,
 	],
 	version = DATABASE_VERSION,
+	exportSchema = true,
 )
 abstract class MangaDatabase : RoomDatabase() {
 
@@ -118,6 +122,8 @@ abstract class MangaDatabase : RoomDatabase() {
 	abstract fun getChaptersDao(): ChaptersDao
 
 	abstract fun getSourcePresetsDao(): SourcePresetsDao
+
+	abstract fun getTrackingAnchorsDao(): TrackingAnchorsDao
 }
 
 fun getDatabaseMigrations(context: Context): Array<Migration> = arrayOf(
@@ -149,6 +155,7 @@ fun getDatabaseMigrations(context: Context): Array<Migration> = arrayOf(
 	Migration25To26(),
 	Migration26To27(),
 	Migration27To28(),
+	Migration28To29(),
 )
 
 fun MangaDatabase(context: Context): MangaDatabase = Room

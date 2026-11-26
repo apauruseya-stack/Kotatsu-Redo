@@ -21,6 +21,12 @@
 		app:showAsAction="never" />
 
 	<item
+		android:id="@+id/action_scanlator"
+		android:orderInCategory="19"
+		android:title="@string/select_default_scanlator"
+		app:showAsAction="never" />
+
+	<item
 		android:id="@+id/action_reversed"
 		android:checkable="true"
 		android:orderInCategory="20"

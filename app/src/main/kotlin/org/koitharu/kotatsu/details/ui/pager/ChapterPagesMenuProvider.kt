@@ -46,6 +46,13 @@ class ChapterPagesMenuProvider(
 					menuItem.isVisible = viewModel.mangaDetails.value?.local != null
 					menuItem.isChecked = viewModel.isDownloadedOnly.value == true
 				}
+				menu.findItem(R.id.action_scanlator)?.let { menuItem ->
+					val chapters = viewModel.mangaDetails.value?.allChapters.orEmpty()
+					val distinctScanlators = chapters.mapNotNull { it.scanlator?.trim() }
+						.filter { it.isNotBlank() }
+						.distinct()
+					menuItem.isVisible = distinctScanlators.size > 1
+				}
 			}
 
 			TAB_PAGES, TAB_BOOKMARKS -> {
@@ -71,6 +78,11 @@ class ChapterPagesMenuProvider(
 
 		R.id.action_downloaded -> {
 			viewModel.isDownloadedOnly.value = !menuItem.isChecked
+			true
+		}
+
+		R.id.action_scanlator -> {
+			viewModel.requestScanlatorSelection()
 			true
 		}
 

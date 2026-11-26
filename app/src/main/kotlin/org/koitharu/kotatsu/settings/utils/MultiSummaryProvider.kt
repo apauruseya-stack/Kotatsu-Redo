@@ -9,13 +9,18 @@ class MultiSummaryProvider(@StringRes private val emptySummaryId: Int) :
 
 	override fun provideSummary(preference: MultiSelectListPreference): CharSequence {
 		val values = preference.values
-		return if (values.isEmpty()) {
+		if (values.isNullOrEmpty()) {
 			return preference.context.getString(emptySummaryId)
-		} else {
-			values.joinToString(", ") {
-				preference.entries.getOrNull(preference.findIndexOfValue(it))
-					?: preference.context.getString(androidx.preference.R.string.not_set)
-			}
 		}
+		val formatted = values.mapNotNull { value ->
+			val index = preference.findIndexOfValue(value)
+			if (index >= 0 && preference.entries != null) {
+				preference.entries.getOrNull(index)
+			} else {
+				preference.entries?.firstOrNull { it.toString().equals(value, ignoreCase = true) }
+					?: value
+			}
+		}.joinToString(", ")
+		return formatted.ifEmpty { preference.context.getString(emptySummaryId) }
 	}
 }

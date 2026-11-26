@@ -56,6 +56,9 @@ class SettingsActivity :
 
 	private val viewModel: SettingsSearchViewModel by viewModels()
 
+	@javax.inject.Inject
+	lateinit var settings: org.koitharu.kotatsu.core.prefs.AppSettings
+
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 		setContentView(ActivitySettingsBinding.inflate(layoutInflater))
@@ -73,6 +76,13 @@ class SettingsActivity :
 		}
 		viewModel.isSearchActive.observe(this, ::toggleSearchMode)
 		viewModel.onNavigateToPreference.observeEvent(this, ::navigateToPreference)
+
+		if (settings.isLiquidGlass) {
+			viewBinding.appbar.elevation = 0f
+			viewBinding.appbar.background = null
+			viewBinding.toolbar.elevation = 0f
+			viewBinding.toolbar.background = null
+		}
 	}
 
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {

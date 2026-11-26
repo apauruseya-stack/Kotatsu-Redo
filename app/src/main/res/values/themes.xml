@@ -308,6 +308,25 @@
 	<!-- Changes only for night -->
 	<style name="ThemeOverlay.Kotatsu.Amoled" parent="" />
 
+	<!-- Liquid Glass Theme Overlay -->
+	<style name="ThemeOverlay.Kotatsu.LiquidGlass" parent="">
+		<item name="glassAccent">#9B7BFF</item>
+		<item name="glassFill">#0EFFFFFF</item>
+		<item name="glassRim">#C0FFFFFF</item>
+		<item name="glassStroke">#33FFFFFF</item>
+		<item name="glassTint">#17FFFFFF</item>
+		<item name="glassGlow">#5B2BD8</item>
+	</style>
+
+	<style name="ThemeOverlay.Kotatsu.LiquidGlass.Light" parent="">
+		<item name="glassAccent">#7C4DFF</item>
+		<item name="glassFill">#CCFFFFFF</item>
+		<item name="glassRim">#FFFFFFFF</item>
+		<item name="glassStroke">#4DFFFFFF</item>
+		<item name="glassTint">#0D7C4DFF</item>
+		<item name="glassGlow">#7C4DFF</item>
+	</style>
+
 	<!-- App Widgets -->
 
 	<style name="Theme.Kotatsu.AppWidgetContainer" parent="@style/Theme.MaterialComponents.Light">
