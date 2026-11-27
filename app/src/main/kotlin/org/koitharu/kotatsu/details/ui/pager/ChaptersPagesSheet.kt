@@ -11,7 +11,6 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
-import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.sheet.AdaptiveSheetBehavior.Companion.STATE_COLLAPSED
@@ -56,23 +55,18 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 		super.onViewBindingCreated(binding, savedInstanceState)
 		disableFitToContents()
 
-		val args = arguments ?: Bundle.EMPTY
-		var defaultTab = args.getInt(AppRouter.KEY_TAB, settings.defaultDetailsTab)
-		val adapter = ChaptersPagesAdapter(this, settings.isPagesTabEnabled)
-		if (!adapter.isPagesTabEnabled) {
-			defaultTab = (defaultTab - 1).coerceAtLeast(TAB_CHAPTERS)
-		}
+		val adapter = ChaptersPagesAdapter(this)
 		(viewModel as? DetailsViewModel)?.let { dvm ->
 			ReadButtonDelegate(binding.splitButtonRead, dvm, router).attach(viewLifecycleOwner)
 		}
-		binding.pager.offscreenPageLimit = adapter.itemCount
+		binding.pager.offscreenPageLimit = 1
 		binding.pager.recyclerView?.isNestedScrollingEnabled = false
 		binding.pager.adapter = adapter
 		binding.pager.doOnPageChanged(::onPageChanged)
 		TabLayoutMediator(binding.tabs, binding.pager, adapter).attach()
 		binding.tabs.addOnTabSelectedListener(this)
-		binding.pager.setCurrentItem(defaultTab, false)
-		binding.tabs.isVisible = adapter.itemCount > 1
+		binding.pager.setCurrentItem(TAB_CHAPTERS, false)
+		binding.tabs.isVisible = false
 
 		val menuProvider = ChapterPagesMenuProvider(viewModel, this, binding.pager, settings)
 		onBackPressedDispatcher.addCallback(viewLifecycleOwner, menuProvider)
