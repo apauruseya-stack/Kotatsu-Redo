@@ -1254,6 +1254,10 @@ Optional — skip it and you appear as anon.</string>
 	<string name="sources_updated">Manga sources updated</string>
 	<string name="import_from_anilist">Import from AniList</string>
 	<string name="import_from_anilist_summary">Import your reading list and sync chapter progress</string>
+	<string name="anilist_import_sources">AniList import sources</string>
+	<string name="anilist_import_sources_summary">Select sources to search and match when importing from AniList</string>
+	<string name="anilist_select_import_sources">Select Import Sources</string>
+	<string name="anilist_select_import_sources_empty">Please select at least one source</string>
 	<string name="anilist_import_resolving">Searching sources for titles…</string>
 	<string name="anilist_import_preview_title">AniList Import Preview</string>
 	<string name="anilist_import_matched">Ready to import</string>

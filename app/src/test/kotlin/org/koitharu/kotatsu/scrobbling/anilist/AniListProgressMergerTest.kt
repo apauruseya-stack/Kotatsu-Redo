@@ -345,4 +345,31 @@ class AniListProgressMergerTest {
 		assertTrue(advance.isClamped)
 		assertEquals(40L, advance.targetChapter.id)
 	}
+
+	@Test
+	fun latestChapterFractional_pointFive_marksAsReadAndAdvancesToLatest() {
+		// Series has Ch. 1..140, Ch. 141, and Ch. 141.5 (e.g. final extra/side story)
+		val chapters = listOf(
+			chapter(140L, 140f),
+			chapter(141L, 141f),
+			chapter(142L, 141.5f, title = "Ch. 141.5 - Side Story"),
+		)
+		val localHistory = history(chapterId = 140L, page = 1) // read up to 140
+
+		// AniList progress is integer 141 (AniList user read up to 141)
+		val result = AniListProgressMerger.merge(
+			remoteProgress = 141,
+			remoteStatus = "CURRENT",
+			currentHistory = localHistory,
+			cachedChapters = chapters,
+		)
+
+		// When the latest chapter is 141.5, reaching 141 must complete and mark the series up to the latest chapter
+		assertTrue(result is MergeResult.Advance)
+		val advance = result as MergeResult.Advance
+		assertEquals(142L, advance.targetChapter.id)
+		assertEquals(141.5f, advance.targetChapter.number)
+		assertEquals(1.0f, advance.percent, 0.001f)
+		assertFalse(advance.isClamped)
+	}
 }

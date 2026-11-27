@@ -75,23 +75,27 @@ class AniListImportUseCase @Inject constructor(
 
 	suspend fun getPrioritySources(): List<MangaSource> {
 		val working = ActiveParsers.workingSources.toList()
-		val mangadot = working.filter {
-			it.name.contains("mangadot", ignoreCase = true) || it.getTitle(context).contains("mangadot", ignoreCase = true)
+		val configuredNames = settings.aniListImportSourceNames
+		if (!configuredNames.isNullOrEmpty()) {
+			val selectedSources = working.filter { it.name in configuredNames }
+			if (selectedSources.isNotEmpty()) {
+				return selectedSources
+			}
 		}
+
+		val enabledSources = runCatching { mangaSourcesRepository.getEnabledSources() }
+			.getOrDefault(emptyList())
+		if (enabledSources.isNotEmpty()) {
+			return enabledSources
+		}
+
 		val asura = working.filter {
 			it.name.contains("asura", ignoreCase = true) || it.getTitle(context).contains("asura", ignoreCase = true)
 		}
-		val kagane = working.filter {
-			it.name.contains("kagane", ignoreCase = true) || it.getTitle(context).contains("kagane", ignoreCase = true)
+		val mangadot = working.filter {
+			it.name.contains("mangadot", ignoreCase = true) || it.getTitle(context).contains("mangadot", ignoreCase = true)
 		}
-
-		val prioritySet = (mangadot + asura + kagane).toSet()
-		val enabledSources = runCatching { mangaSourcesRepository.getEnabledSources() }
-			.getOrDefault(emptyList())
-			.filter { it !in prioritySet }
-			.take(3)
-
-		return (mangadot + asura + kagane + enabledSources).distinct()
+		return (asura + mangadot + working).distinct().take(5)
 	}
 
 	suspend fun resolve(
@@ -418,11 +422,18 @@ class AniListImportUseCase @Inject constructor(
 			matchedIndex = (entry.progress - 1).coerceIn(0, chapters.lastIndex)
 		}
 
+		val latestChapter = chapters.last()
+		val isLatestFractionalOfCurrent = matchedIndex == chapters.lastIndex - 1 &&
+			getChapterNumber(latestChapter) > 0f &&
+			getChapterNumber(latestChapter) < (entry.progress + 1.0f)
+
 		val isFinished = entry.status.equals("COMPLETED", ignoreCase = true) ||
-			matchedIndex >= chapters.lastIndex
+			matchedIndex >= chapters.lastIndex ||
+			isLatestFractionalOfCurrent
 
 		val (targetChapter, percent) = if (isFinished) {
-			Pair(chapters[matchedIndex], 1.0f)
+			val target = if (isLatestFractionalOfCurrent) latestChapter else chapters[matchedIndex]
+			Pair(target, 1.0f)
 		} else {
 			val nextIndex = matchedIndex + 1
 			val calculatedPercent = (matchedIndex + 1).toFloat() / chapters.size.toFloat()

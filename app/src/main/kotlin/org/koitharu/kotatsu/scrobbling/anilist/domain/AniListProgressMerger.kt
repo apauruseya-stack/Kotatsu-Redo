@@ -70,6 +70,17 @@ object AniListProgressMerger {
 			return MergeResult.FlaggedMismatch(remoteProgress, latestNum)
 		}
 
+		var matchedIndex = -1
+		for (i in branchChapters.indices) {
+			val num = getChapterNumber(branchChapters[i])
+			if (num > 0f && num <= remoteProgress.toFloat()) {
+				matchedIndex = i
+			}
+		}
+		if (matchedIndex == -1) {
+			matchedIndex = (remoteProgress - 1).coerceIn(0, branchChapters.lastIndex)
+		}
+
 		// If remote is slightly ahead of the source (e.g. source hasn't uploaded latest yet),
 		// clamp to the latest available chapter.
 		if (remoteProgress > latestNum) {
@@ -82,23 +93,20 @@ object AniListProgressMerger {
 			)
 		}
 
-		var matchedIndex = -1
-		for (i in branchChapters.indices) {
-			val num = getChapterNumber(branchChapters[i])
-			if (num > 0f && num <= remoteProgress.toFloat()) {
-				matchedIndex = i
-			}
-		}
-		if (matchedIndex == -1) {
-			matchedIndex = (remoteProgress - 1).coerceIn(0, branchChapters.lastIndex)
-		}
+		// When latest chapter is a fractional release (e.g. 141.5 / 141.1 / Epilogue) and AniList integer progress
+		// has reached the base chapter (141), or user marked COMPLETED on AniList, advance and mark completed on the latest chapter.
+		val isLatestFractionalOfCurrent = matchedIndex == branchChapters.lastIndex - 1 &&
+			getChapterNumber(latestChapter) > 0f &&
+			getChapterNumber(latestChapter) < (remoteProgress + 1.0f)
 
 		val isFinished = remoteStatus.equals("COMPLETED", ignoreCase = true) ||
-			matchedIndex >= branchChapters.lastIndex
+			matchedIndex >= branchChapters.lastIndex ||
+			isLatestFractionalOfCurrent
 
 		return if (isFinished) {
+			val target = if (isLatestFractionalOfCurrent) latestChapter else branchChapters[matchedIndex]
 			MergeResult.Advance(
-				targetChapter = branchChapters[matchedIndex],
+				targetChapter = target,
 				percent = 1.0f,
 				isClamped = false,
 				localProgress = localProgress,

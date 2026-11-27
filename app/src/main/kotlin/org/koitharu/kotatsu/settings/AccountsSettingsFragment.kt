@@ -19,6 +19,9 @@ import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import org.koitharu.kotatsu.core.util.ext.viewLifecycleScope
+import org.koitharu.kotatsu.core.model.getTitle
+import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
+import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.scrobbling.anilist.domain.AniListImportUseCase
 import org.koitharu.kotatsu.scrobbling.anilist.work.AniListImportWorker
 import org.koitharu.kotatsu.scrobbling.common.domain.model.ScrobblerService
@@ -34,6 +37,9 @@ class AccountsSettingsFragment : BasePreferenceFragment(R.string.accounts_and_sy
 
 	@Inject
 	lateinit var importUseCase: AniListImportUseCase
+
+	@Inject
+	lateinit var mangaSourcesRepository: MangaSourcesRepository
 
 	@Inject
 	lateinit var aniListSyncUseCase: org.koitharu.kotatsu.scrobbling.anilist.domain.AniListSyncUseCase
@@ -73,16 +79,23 @@ class AccountsSettingsFragment : BasePreferenceFragment(R.string.accounts_and_sy
 
 		val isAniListAuthed = scrobblerAuthHelper.isAuthorized(ScrobblerService.ANILIST)
 		findPreference<Preference>("anilist_import")?.isEnabled = isAniListAuthed
+		findPreference<Preference>("anilist_import_sources")?.isEnabled = isAniListAuthed
 		findPreference<Preference>("anilist_sync_enabled")?.isEnabled = isAniListAuthed
 		findPreference<Preference>("anilist_sync_now")?.isEnabled = isAniListAuthed && settings.isAniListSyncEnabled
 		findPreference<Preference>("anilist_sync_log")?.isEnabled = isAniListAuthed
 		updateSyncNowSummary()
+		updateImportSourcesSummary()
 	}
 
 	override fun onPreferenceTreeClick(preference: Preference): Boolean {
 		return when (preference.key) {
 			"anilist_import" -> {
 				handleAniListImportClick()
+				true
+			}
+
+			"anilist_import_sources" -> {
+				showAniListImportSourcesDialog()
 				true
 			}
 
@@ -316,6 +329,78 @@ class AccountsSettingsFragment : BasePreferenceFragment(R.string.accounts_and_sy
 				.setPositiveButton(R.string.start_import) { _, _ ->
 					AniListImportWorker.enqueue(requireContext())
 					Snackbar.make(listView, R.string.anilist_import_in_progress, Snackbar.LENGTH_LONG).show()
+				}
+				.setNegativeButton(android.R.string.cancel, null)
+				.show()
+		}
+	}
+
+	private fun updateImportSourcesSummary() {
+		val pref = findPreference<Preference>("anilist_import_sources") ?: return
+		viewLifecycleScope.launch {
+			val enabled = withContext(Dispatchers.IO) {
+				mangaSourcesRepository.getEnabledSources()
+			}
+			val configured = settings.aniListImportSourceNames
+			val summary = if (configured.isNullOrEmpty()) {
+				if (enabled.isNotEmpty()) {
+					enabled.take(3).joinToString { it.getTitle(requireContext()) } + (if (enabled.size > 3) " +${enabled.size - 3}" else "")
+				} else {
+					getString(R.string.anilist_import_sources_summary)
+				}
+			} else {
+				val selected = enabled.filter { it.name in configured }
+				if (selected.isNotEmpty()) {
+					selected.joinToString { it.getTitle(requireContext()) }
+				} else {
+					configured.joinToString()
+				}
+			}
+			pref.summary = summary
+		}
+	}
+
+	private fun showAniListImportSourcesDialog() {
+		viewLifecycleScope.launch {
+			val enabled = withContext(Dispatchers.IO) {
+				mangaSourcesRepository.getEnabledSources()
+			}
+			if (enabled.isEmpty()) {
+				Snackbar.make(listView, R.string.anilist_select_import_sources_empty, Snackbar.LENGTH_LONG).show()
+				return@launch
+			}
+
+			val sourceNames = enabled.map { it.name }
+			val sourceTitles = enabled.map { it.getTitle(requireContext()) }.toTypedArray()
+			val currentSelected = settings.aniListImportSourceNames ?: sourceNames.toSet()
+			val checkedItems = BooleanArray(enabled.size) { i ->
+				sourceNames[i] in currentSelected
+			}
+
+			MaterialAlertDialogBuilder(requireContext())
+				.setTitle(R.string.anilist_select_import_sources)
+				.setMultiChoiceItems(sourceTitles, checkedItems) { _, which, isChecked ->
+					checkedItems[which] = isChecked
+				}
+				.setPositiveButton(android.R.string.ok) { _, _ ->
+					val selectedSet = HashSet<String>()
+					for (i in checkedItems.indices) {
+						if (checkedItems[i]) {
+							selectedSet.add(sourceNames[i])
+						}
+					}
+					if (selectedSet.isNotEmpty()) {
+						settings.aniListImportSourceNames = selectedSet
+						importUseCase.clearCachedPlan()
+						updateImportSourcesSummary()
+					} else {
+						Snackbar.make(listView, R.string.anilist_select_import_sources_empty, Snackbar.LENGTH_LONG).show()
+					}
+				}
+				.setNeutralButton(R.string.reset) { _, _ ->
+					settings.aniListImportSourceNames = null
+					importUseCase.clearCachedPlan()
+					updateImportSourcesSummary()
 				}
 				.setNegativeButton(android.R.string.cancel, null)
 				.show()

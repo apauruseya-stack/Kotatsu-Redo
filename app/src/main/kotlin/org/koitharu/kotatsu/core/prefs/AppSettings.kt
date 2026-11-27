@@ -137,6 +137,12 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		get() = prefs.getLong(KEY_ANILIST_LAST_SYNC_REMOTE_UPDATED_AT, 0L)
 		set(value) = prefs.edit { putLong(KEY_ANILIST_LAST_SYNC_REMOTE_UPDATED_AT, value) }
 
+	var aniListImportSourceNames: Set<String>?
+		get() = prefs.getStringSet(KEY_ANILIST_IMPORT_SOURCES, null)
+		set(value) = prefs.edit {
+			if (value == null) remove(KEY_ANILIST_IMPORT_SOURCES) else putStringSet(KEY_ANILIST_IMPORT_SOURCES, value)
+		}
+
 	var trackingCounterVersion: Int
 		get() = prefs.getInt(KEY_TRACKING_COUNTER_VERSION, 0)
 		set(value) = prefs.edit { putInt(KEY_TRACKING_COUNTER_VERSION, value) }
@@ -1014,6 +1020,7 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_ANILIST_SYNC_ENABLED = "anilist_sync_enabled"
 		const val KEY_ANILIST_LAST_SYNC_TIME = "anilist_last_sync_time"
 		const val KEY_ANILIST_LAST_SYNC_REMOTE_UPDATED_AT = "anilist_last_sync_remote_updated_at"
+		const val KEY_ANILIST_IMPORT_SOURCES = "anilist_import_sources"
 		const val KEY_TRACKING_COUNTER_VERSION = "tracking_counter_version"
 		const val KEY_MAIN_FAB = "main_fab"
 		const val KEY_32BIT_COLOR = "enhanced_colors"

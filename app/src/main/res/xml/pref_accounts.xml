@@ -25,6 +25,11 @@
 			android:title="@string/import_from_anilist"
 			app:icon="@drawable/ic_sync" />
 
+		<Preference
+			android:key="anilist_import_sources"
+			android:summary="@string/anilist_import_sources_summary"
+			android:title="@string/anilist_import_sources" />
+
 		<androidx.preference.SwitchPreferenceCompat
 			android:defaultValue="true"
 			android:key="anilist_sync_enabled"
