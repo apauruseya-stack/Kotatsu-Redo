@@ -36,6 +36,8 @@ fun HistoryInfo(
 ): HistoryInfo {
 	val chapters = if (manga?.chapters?.isEmpty() == true) {
 		emptyList()
+	} else if (branch.isNullOrEmpty() || branch.equals("ALL", ignoreCase = true)) {
+		manga?.allChapters
 	} else {
 		manga?.chapters?.get(branch)
 	}

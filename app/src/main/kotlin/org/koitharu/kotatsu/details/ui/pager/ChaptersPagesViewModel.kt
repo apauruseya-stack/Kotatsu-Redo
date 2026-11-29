@@ -177,34 +177,32 @@ abstract class ChaptersPagesViewModel(
 		preferredScanlator,
 	) { details, branch, currentScanlator, preferred ->
 		val result = ArrayList<ChipsView.ChipModel>()
-		val branches = details?.chapters?.toList()?.sortedWithSafe(
-			compareBy(LocaleStringComparator()) { it.first },
-		).orEmpty()
-		if (branches.size > 1) {
-			branches.mapTo(result) {
-				val option = ListFilterOption.Branch(titleText = it.first, chaptersCount = it.second.size)
-				option.toChipModel(isChecked = it.first == branch)
-			}
+		val allChapters = details?.allChapters.orEmpty()
+		if (allChapters.isEmpty()) {
+			return@combine result
 		}
 
-		val rawBranchChapters = details?.chapters?.get(branch)
-			?: details?.allChapters.orEmpty()
-		val distinctScanlators = rawBranchChapters.mapNotNull { it.scanlator?.trim() }
-			.filter { it.isNotBlank() }
-			.distinct()
+		val distinctBranches = details?.chapters?.keys?.filterNotNull()?.filter { it.isNotBlank() }.orEmpty()
+		val distinctScanlators = allChapters.mapNotNull { it.scanlator?.trim() }.filter { it.isNotBlank() }.distinct()
 
-		if (distinctScanlators.size > 1) {
+		val isBranchGroup = distinctBranches.size > 1
+		val distinctGroups = if (isBranchGroup) distinctBranches else distinctScanlators
+
+		if (distinctGroups.size > 1) {
 			val effectivePreferred = preferred
-				?: ScanlatorPriorities.pickBestDefault(distinctScanlators, rawBranchChapters)
-				?: distinctScanlators.first()
+				?: ScanlatorPriorities.pickBestDefault(distinctGroups, allChapters)
+				?: distinctGroups.first()
 
 			val mergedAllCount = ScanlatorChapterMerger.mergeChapters(
-				chapters = rawBranchChapters,
+				chapters = allChapters,
 				selectedScanlator = null,
 				preferredScanlator = effectivePreferred,
+				useBranch = isBranchGroup,
 			).size
 
-			val isAllSelected = currentScanlator.isNullOrEmpty() || currentScanlator.equals("ALL", ignoreCase = true)
+			val currentGroup = if (isBranchGroup) branch else currentScanlator
+			val isAllSelected = currentGroup.isNullOrEmpty() || currentGroup.equals("ALL", ignoreCase = true)
+
 			val allOption = ListFilterOption.Scanlator(
 				titleText = null,
 				chaptersCount = mergedAllCount,
@@ -212,25 +210,36 @@ abstract class ChaptersPagesViewModel(
 			)
 			result.add(allOption.toChipModel(isChecked = isAllSelected))
 
-			val scanlatorCounts = rawBranchChapters.groupingBy { it.scanlator?.trim().orEmpty() }.eachCount()
+			val groupCounts = if (isBranchGroup) {
+				details?.chapters?.mapValues { it.value.size }.orEmpty()
+			} else {
+				allChapters.groupingBy { it.scanlator?.trim().orEmpty() }.eachCount()
+			}
 
-			val sortedScanlators = distinctScanlators.sortedWith(
+			val sortedGroups = distinctGroups.sortedWith(
 				compareBy<String> {
 					if (it.equals(effectivePreferred, ignoreCase = true)) 0 else 1
 				}.thenBy {
 					ScanlatorPriorities.getPriority(it)
 				}.thenByDescending {
-					scanlatorCounts[it] ?: 0
+					groupCounts[it] ?: 0
 				}.thenBy(LocaleStringComparator()) { it }
 			)
 
-			for (s in sortedScanlators) {
-				val isSelected = !isAllSelected && currentScanlator.equals(s, ignoreCase = true)
-				val option = ListFilterOption.Scanlator(
-					titleText = s,
-					chaptersCount = scanlatorCounts[s] ?: 0,
-					isAll = false,
-				)
+			for (g in sortedGroups) {
+				val isSelected = !isAllSelected && currentGroup.equals(g, ignoreCase = true)
+				val option = if (isBranchGroup) {
+					ListFilterOption.Branch(
+						titleText = g,
+						chaptersCount = groupCounts[g] ?: 0,
+					)
+				} else {
+					ListFilterOption.Scanlator(
+						titleText = g,
+						chaptersCount = groupCounts[g] ?: 0,
+						isAll = false,
+					)
+				}
 				result.add(option.toChipModel(isChecked = isSelected))
 			}
 		}
@@ -241,10 +250,10 @@ abstract class ChaptersPagesViewModel(
 	private var hasPromptedScanlators = false
 
 	private fun checkAndPromptScanlators(details: MangaDetails) {
-		val distinctScanlators = details.allChapters.mapNotNull { it.scanlator?.trim() }
-			.filter { it.isNotBlank() }
-			.distinct()
-		if (distinctScanlators.size <= 1) return
+		val distinctBranches = details.chapters.keys.filterNotNull().filter { it.isNotBlank() }
+		val distinctScanlators = details.allChapters.mapNotNull { it.scanlator?.trim() }.filter { it.isNotBlank() }.distinct()
+		val distinctGroups = if (distinctBranches.size > 1) distinctBranches else distinctScanlators
+		if (distinctGroups.size <= 1) return
 
 		val mangaId = details.id
 		if (settings.hasPreferredScanlator(mangaId)) {
@@ -252,13 +261,13 @@ abstract class ChaptersPagesViewModel(
 			return
 		}
 
-		val bestDefault = ScanlatorPriorities.pickBestDefault(distinctScanlators, details.allChapters)
-			?: distinctScanlators.first()
+		val bestDefault = ScanlatorPriorities.pickBestDefault(distinctGroups, details.allChapters)
+			?: distinctGroups.first()
 		preferredScanlator.value = bestDefault
 
 		if (!hasPromptedScanlators) {
 			hasPromptedScanlators = true
-			val sortedScanlators = distinctScanlators.sortedWith(
+			val sortedScanlators = distinctGroups.sortedWith(
 				compareBy<String> { ScanlatorPriorities.getPriority(it) }
 					.thenBy(LocaleStringComparator()) { it }
 			)
@@ -288,16 +297,16 @@ abstract class ChaptersPagesViewModel(
 
 	fun requestScanlatorSelection() {
 		val details = mangaDetails.value ?: return
-		val distinctScanlators = details.allChapters.mapNotNull { it.scanlator?.trim() }
-			.filter { it.isNotBlank() }
-			.distinct()
-		if (distinctScanlators.size <= 1) return
+		val distinctBranches = details.chapters.keys.filterNotNull().filter { it.isNotBlank() }
+		val distinctScanlators = details.allChapters.mapNotNull { it.scanlator?.trim() }.filter { it.isNotBlank() }.distinct()
+		val distinctGroups = if (distinctBranches.size > 1) distinctBranches else distinctScanlators
+		if (distinctGroups.size <= 1) return
 
 		val currentPreferred = preferredScanlator.value
-			?: ScanlatorPriorities.pickBestDefault(distinctScanlators, details.allChapters)
-			?: distinctScanlators.first()
+			?: ScanlatorPriorities.pickBestDefault(distinctGroups, details.allChapters)
+			?: distinctGroups.first()
 
-		val sortedScanlators = distinctScanlators.sortedWith(
+		val sortedScanlators = distinctGroups.sortedWith(
 			compareBy<String> { ScanlatorPriorities.getPriority(it) }
 				.thenBy(LocaleStringComparator()) { it }
 		)

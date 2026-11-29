@@ -31,44 +31,59 @@ object ScanlatorPriorities {
 		return s.contains("asura") || s.contains("official") || s.contains("webtoon")
 	}
 
-	fun pickBestDefault(scanlators: Collection<String>, chapters: Collection<MangaChapter>): String? {
-		if (scanlators.isEmpty()) return null
-		val asura = scanlators.firstOrNull { it.contains("asura", ignoreCase = true) }
-		val official = scanlators.firstOrNull {
+	fun pickBestDefault(groups: Collection<String>, chapters: Collection<MangaChapter>): String? {
+		if (groups.isEmpty()) return null
+		val asura = groups.firstOrNull { it.contains("asura", ignoreCase = true) }
+		val official = groups.firstOrNull {
 			it.contains("official", ignoreCase = true) || it.contains("webtoon", ignoreCase = true)
 		}
 
 		if (asura != null) return asura
 		if (official != null) return official
 
-		val bestByPriority = scanlators.minByOrNull { getPriority(it) }
+		val bestByPriority = groups.minByOrNull { getPriority(it) }
 		if (bestByPriority != null && getPriority(bestByPriority) < 100) {
 			return bestByPriority
 		}
 
-		val counts = chapters.groupingBy { it.scanlator?.trim().orEmpty() }.eachCount()
-		return scanlators.maxByOrNull { counts[it] ?: 0 } ?: scanlators.firstOrNull()
+		val counts = chapters.groupingBy {
+			it.branch?.trim()?.takeIf { b -> b in groups }
+				?: it.scanlator?.trim()?.takeIf { s -> s in groups }
+				?: ""
+		}.eachCount()
+		return groups.maxByOrNull { counts[it] ?: 0 } ?: groups.firstOrNull()
 	}
 }
 
 object ScanlatorChapterMerger {
 
+	fun getChapterGroup(chapter: MangaChapter, useBranch: Boolean): String? {
+		return if (useBranch) {
+			chapter.branch?.trim()?.takeIf { it.isNotEmpty() } ?: chapter.scanlator?.trim()?.takeIf { it.isNotEmpty() }
+		} else {
+			chapter.scanlator?.trim()?.takeIf { it.isNotEmpty() } ?: chapter.branch?.trim()?.takeIf { it.isNotEmpty() }
+		}
+	}
+
 	fun mergeChapters(
 		chapters: List<MangaChapter>,
-		selectedScanlator: String?,
-		preferredScanlator: String?,
+		selectedScanlator: String? = null,
+		preferredScanlator: String? = null,
+		useBranch: Boolean = false,
 	): List<MangaChapter> {
-		val distinctScanlators = chapters.mapNotNull { it.scanlator?.trim() }
+		val distinctGroups = chapters.mapNotNull { getChapterGroup(it, useBranch) }
 			.filter { it.isNotBlank() }
 			.distinct()
 
-		if (distinctScanlators.size <= 1) {
+		if (distinctGroups.size <= 1) {
 			return chapters
 		}
 
-		// Specific scanlator filter
+		// Specific group filter
 		if (!selectedScanlator.isNullOrEmpty() && !selectedScanlator.equals("ALL", ignoreCase = true)) {
-			val filtered = chapters.filter { it.scanlator?.trim().equals(selectedScanlator.trim(), ignoreCase = true) }
+			val filtered = chapters.filter {
+				getChapterGroup(it, useBranch).equals(selectedScanlator.trim(), ignoreCase = true)
+			}
 			if (filtered.isNotEmpty()) {
 				return filtered
 			}
@@ -76,12 +91,12 @@ object ScanlatorChapterMerger {
 
 		// Hybrid "All" Mode:
 		val effectivePreferred = preferredScanlator
-			?: ScanlatorPriorities.pickBestDefault(distinctScanlators, chapters)
-			?: distinctScanlators.first()
+			?: ScanlatorPriorities.pickBestDefault(distinctGroups, chapters)
+			?: distinctGroups.first()
 
 		fun chapterKey(ch: MangaChapter): String {
-			return if (ch.number > 0f) {
-				"v:${ch.volume}:n:${ch.number}"
+			return if (ch.number >= 0f) {
+				"n:${ch.number}"
 			} else {
 				"t:${ch.title?.trim()?.lowercase(Locale.ROOT) ?: ch.id.toString()}"
 			}
@@ -91,9 +106,9 @@ object ScanlatorChapterMerger {
 		val result = ArrayList<MangaChapter>(groupedByKey.size)
 
 		for ((_, groupChapters) in groupedByKey) {
-			// 1. Try to pick from preferred scanlator
+			// 1. Try to pick from preferred group
 			val fromPreferred = groupChapters.firstOrNull {
-				it.scanlator?.trim().equals(effectivePreferred.trim(), ignoreCase = true)
+				getChapterGroup(it, useBranch).equals(effectivePreferred.trim(), ignoreCase = true)
 			}
 			if (fromPreferred != null) {
 				result.add(fromPreferred)
@@ -102,7 +117,7 @@ object ScanlatorChapterMerger {
 
 			// 2. Fall back to best available group (e.g. newer chapter released by another group)
 			val bestFallback = groupChapters.minWithOrNull(
-				compareBy<MangaChapter> { ScanlatorPriorities.getPriority(it.scanlator) }
+				compareBy<MangaChapter> { ScanlatorPriorities.getPriority(getChapterGroup(it, useBranch)) }
 					.thenBy { if (it.uploadDate > 0) it.uploadDate else Long.MAX_VALUE }
 					.thenBy { it.id }
 			) ?: groupChapters.first()

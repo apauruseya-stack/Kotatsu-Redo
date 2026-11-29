@@ -15,63 +15,36 @@
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        app:contentInsetStart="16dp"
+        app:contentInsetEnd="8dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <com.google.android.material.button.MaterialSplitButton
+            android:id="@+id/split_button_read"
+            style="?attr/detailsReadSplitButtonStyle"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:baselineAligned="false"
-            android:orientation="horizontal">
+            android:layout_gravity="start|center_vertical"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp">
 
-            <com.google.android.material.tabs.TabLayout
-                android:id="@+id/tabs"
-                style="?tabSecondaryStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_gravity="start|center_vertical"
-                android:layout_weight="1"
-                android:visibility="gone"
-                android:background="@null"
-                app:tabGravity="start"
-                app:tabIndicator="@drawable/bg_tab_pill"
-                app:tabIndicatorAnimationMode="fade"
-                app:tabIndicatorColor="?colorSurfaceDim"
-                app:tabIndicatorFullWidth="true"
-                app:tabIndicatorGravity="stretch"
-                app:tabInlineLabel="true"
-                app:tabMinWidth="0dp"
-                app:tabMode="scrollable"
-                app:tabUnboundedRipple="true" />
-
-            <com.google.android.material.button.MaterialSplitButton
-                android:id="@+id/split_button_read"
-                style="?attr/detailsReadSplitButtonStyle"
+            <Button
+                android:id="@+id/button_read"
+                style="?attr/detailsReadLeadingButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="end|center_vertical"
-                android:paddingTop="0dp"
-                android:paddingBottom="0dp">
+                android:text="@string/read" />
 
-                <Button
-                    android:id="@+id/button_read"
-                    style="?attr/detailsReadLeadingButtonStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/read" />
+            <Button
+                android:id="@+id/button_read_menu"
+                style="?attr/detailsReadMenuButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/show_menu"
+                app:icon="?expandCollapseIndicator"
+                app:toggleCheckedStateOnClick="false" />
 
-                <Button
-                    android:id="@+id/button_read_menu"
-                    style="?attr/detailsReadMenuButtonStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/show_menu"
-                    app:icon="?expandCollapseIndicator"
-                    app:toggleCheckedStateOnClick="false" />
-
-            </com.google.android.material.button.MaterialSplitButton>
-
-        </LinearLayout>
+        </com.google.android.material.button.MaterialSplitButton>
 
     </com.google.android.material.appbar.MaterialToolbar>
 

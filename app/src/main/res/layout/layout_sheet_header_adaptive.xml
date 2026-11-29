@@ -12,6 +12,8 @@
 		android:id="@+id/sh_dragHandle"
 		android:layout_width="match_parent"
 		android:layout_height="wrap_content"
+		android:paddingTop="6dp"
+		android:paddingBottom="2dp"
 		android:visibility="gone"
 		tools:visibility="visible" />
 

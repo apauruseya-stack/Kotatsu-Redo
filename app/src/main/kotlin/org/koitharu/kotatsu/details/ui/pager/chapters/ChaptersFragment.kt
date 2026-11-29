@@ -138,6 +138,7 @@ class ChaptersFragment :
 			is ListFilterOption.Branch -> viewModel.setSelectedBranch(data.titleText)
 			is ListFilterOption.Scanlator -> {
 				if (data.isAll) {
+					viewModel.setSelectedBranch(null)
 					viewModel.setSelectedScanlator(null)
 				} else {
 					viewModel.setSelectedScanlator(data.titleText)

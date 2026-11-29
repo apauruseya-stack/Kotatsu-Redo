@@ -204,4 +204,36 @@ class ScanlatorChapterMergerTest {
 		)
 		assertEquals(singleGroupChapters, result)
 	}
+
+	@Test
+	fun branchBasedGroups_smartHybrid_worksWithBranches() {
+		val asuraChapters = (1..134).map { num ->
+			createChapter(
+				id = num.toLong(),
+				number = num.toFloat(),
+				scanlator = "",
+			).copy(branch = "Asura Scans")
+		}
+		val blozeChapters = (134..135).map { num ->
+			createChapter(
+				id = 1000L + num,
+				number = num.toFloat(),
+				scanlator = "",
+			).copy(branch = "Bl0ze")
+		}
+
+		val all = asuraChapters + blozeChapters
+		val merged = ScanlatorChapterMerger.mergeChapters(
+			chapters = all,
+			selectedScanlator = null,
+			preferredScanlator = "Asura Scans",
+			useBranch = true,
+		)
+
+		assertEquals(135, merged.size)
+		assertEquals("Asura Scans", merged[133].branch)
+		assertEquals(134f, merged[133].number, 0.001f)
+		assertEquals("Bl0ze", merged[134].branch)
+		assertEquals(135f, merged[134].number, 0.001f)
+	}
 }

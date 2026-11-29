@@ -7,15 +7,12 @@ import android.view.ViewGroup
 import androidx.appcompat.view.ActionMode
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
-import com.google.android.material.tabs.TabLayout
-import com.google.android.material.tabs.TabLayoutMediator
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.sheet.AdaptiveSheetBehavior.Companion.STATE_COLLAPSED
 import org.koitharu.kotatsu.core.ui.sheet.AdaptiveSheetBehavior.Companion.STATE_DRAGGING
-import org.koitharu.kotatsu.core.ui.sheet.AdaptiveSheetBehavior.Companion.STATE_EXPANDED
 import org.koitharu.kotatsu.core.ui.sheet.AdaptiveSheetBehavior.Companion.STATE_SETTLING
 import org.koitharu.kotatsu.core.ui.sheet.AdaptiveSheetCallback
 import org.koitharu.kotatsu.core.ui.sheet.BaseAdaptiveSheet
@@ -38,7 +35,6 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
-	TabLayout.OnTabSelectedListener,
 	ActionModeListener,
 	AdaptiveSheetCallback {
 
@@ -63,10 +59,7 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 		binding.pager.recyclerView?.isNestedScrollingEnabled = false
 		binding.pager.adapter = adapter
 		binding.pager.doOnPageChanged(::onPageChanged)
-		TabLayoutMediator(binding.tabs, binding.pager, adapter).attach()
-		binding.tabs.addOnTabSelectedListener(this)
 		binding.pager.setCurrentItem(TAB_CHAPTERS, false)
-		binding.tabs.isVisible = false
 
 		val menuProvider = ChapterPagesMenuProvider(viewModel, this, binding.pager, settings)
 		onBackPressedDispatcher.addCallback(viewLifecycleOwner, menuProvider)
@@ -80,7 +73,6 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 		actionModeDelegate?.addListener(this, viewLifecycleOwner)
 		addSheetCallback(this, viewLifecycleOwner)
 
-		viewModel.newChaptersCount.observe(viewLifecycleOwner, ::onNewChaptersChanged)
 		if (dialog != null) {
 			viewModel.onError.observeEvent(viewLifecycleOwner, SnackbarErrorObserver(binding.pager, this))
 			viewModel.onActionDone.observeEvent(viewLifecycleOwner, ReversibleActionObserver(binding.pager))
@@ -93,33 +85,29 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat = insets
 
 	override fun onStateChanged(sheet: View, newState: Int) {
-        val binding = viewBinding ?: return
-        binding.layoutTouchBlock.isTouchEventsAllowed = dialog != null || newState != STATE_COLLAPSED
-        if (newState == STATE_DRAGGING || newState == STATE_SETTLING) {
-            return
-        }
+		val binding = viewBinding ?: return
+		binding.layoutTouchBlock.isTouchEventsAllowed = dialog != null || newState != STATE_COLLAPSED
+		if (newState == STATE_DRAGGING || newState == STATE_SETTLING) {
+			return
+		}
 		val isActionModeStarted = actionModeDelegate?.isActionModeStarted == true
-		binding.toolbar.menuView?.isVisible = newState == STATE_EXPANDED && !isActionModeStarted
-		binding.splitButtonRead.isVisible = newState != STATE_EXPANDED && !isActionModeStarted
-			&& viewModel is DetailsViewModel
+		binding.toolbar.menuView?.isVisible = !isActionModeStarted
+		binding.splitButtonRead.isVisible = !isActionModeStarted && viewModel is DetailsViewModel
 	}
 
 	override fun onActionModeStarted(mode: ActionMode) {
 		viewBinding?.toolbar?.menuView?.isVisible = false
+		viewBinding?.splitButtonRead?.isVisible = false
 		view?.post(::expandAndLock)
 	}
 
 	override fun onActionModeFinished(mode: ActionMode) {
 		unlock()
-		val state = behavior?.state ?: STATE_EXPANDED
-		viewBinding?.toolbar?.menuView?.isVisible = state != STATE_COLLAPSED
+		viewBinding?.toolbar?.menuView?.isVisible = true
+		viewBinding?.splitButtonRead?.isVisible = viewModel is DetailsViewModel
 	}
 
-	override fun onTabSelected(tab: TabLayout.Tab?) = Unit
-
-	override fun onTabUnselected(tab: TabLayout.Tab?) = Unit
-
-	override fun onTabReselected(tab: TabLayout.Tab?) {
+	fun scrollToTop() {
 		val f = childFragmentManager.findCurrentPagerFragment(
 			viewBinding?.pager ?: return,
 		) as? RecyclerViewOwner ?: return
@@ -139,27 +127,12 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 	private fun adjustLockState() {
 		viewBinding?.run {
 			pager.isUserInputEnabled = !isLocked
-			tabs.visibility = when {
-				(pager.adapter?.itemCount ?: 0) <= 1 -> View.GONE
-				isLocked -> View.INVISIBLE
-				else -> View.VISIBLE
-			}
 		}
 	}
 
 	private fun onPageChanged(position: Int) {
 		viewBinding?.toolbar?.invalidateMenu()
 		settings.lastDetailsTab = position
-	}
-
-	private fun onNewChaptersChanged(counter: Int) {
-		val tab = viewBinding?.tabs?.getTabAt(0) ?: return
-		if (counter == 0) {
-			tab.removeBadge()
-		} else {
-			val badge = tab.orCreateBadge
-			badge.number = counter
-		}
 	}
 
 	companion object {

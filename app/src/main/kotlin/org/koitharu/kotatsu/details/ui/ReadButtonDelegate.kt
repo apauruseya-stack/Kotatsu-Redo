@@ -155,10 +155,15 @@ class ReadButtonDelegate(
 	}
 
 	private fun getContinueLabel(info: HistoryInfo): CharSequence {
-		val chapter = viewModel.getMangaOrNull()
-			?.chapters
-			?.filter { it.branch == viewModel.selectedBranchValue }
-			?.getOrNull(info.currentChapter)
+		val manga = viewModel.getMangaOrNull()
+		val branch = viewModel.selectedBranchValue
+		val chapter = if (branch.isNullOrEmpty() || branch.equals("ALL", ignoreCase = true)) {
+			manga?.chapters?.getOrNull(info.currentChapter)
+		} else {
+			manga?.chapters
+				?.filter { it.branch == branch }
+				?.getOrNull(info.currentChapter)
+		}
 		return chapter?.formatContinueLabel(context) ?: context.getString(R.string._continue)
 	}
 

@@ -20,13 +20,33 @@ fun MangaDetails.mapChapters(
 	selectedScanlator: String? = null,
 	preferredScanlator: String? = null,
 ): List<ChapterListItem> {
-	val rawRemoteChapters = chapters[branch].orEmpty()
+	val distinctBranches = chapters.keys.filterNotNull().filter { it.isNotBlank() }
+	val isBranchGroup = distinctBranches.size > 1
+	val isAllBranch = branch.isNullOrEmpty() || branch.equals("ALL", ignoreCase = true)
+
+	val rawRemoteChapters = if (isAllBranch) {
+		allChapters
+	} else {
+		chapters[branch].orEmpty()
+	}
+
+	val selectedGroup = if (isBranchGroup) {
+		if (isAllBranch) null else branch
+	} else {
+		selectedScanlator
+	}
+
 	val remoteChapters = org.koitharu.kotatsu.details.domain.ScanlatorChapterMerger.mergeChapters(
 		chapters = rawRemoteChapters,
-		selectedScanlator = selectedScanlator,
+		selectedScanlator = selectedGroup,
 		preferredScanlator = preferredScanlator,
+		useBranch = isBranchGroup,
 	)
-	val localChapters = local?.manga?.getChapters(branch).orEmpty()
+	val localChapters = if (isAllBranch) {
+		local?.manga?.chapters.orEmpty()
+	} else {
+		local?.manga?.getChapters(branch).orEmpty()
+	}
 	if (remoteChapters.isEmpty() && localChapters.isEmpty()) {
 		return emptyList()
 	}

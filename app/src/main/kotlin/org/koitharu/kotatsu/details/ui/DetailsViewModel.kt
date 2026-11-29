@@ -296,10 +296,15 @@ class DetailsViewModel @Inject constructor(
 				// renamed its branches), or when it was not picked from the history and the user has kept it.
 				val picked = defaultBranch
 				val current = selectedBranch.value
-				if (picked == null || current !in it.chapters || (current == picked.name && !picked.isFromHistory)) {
+				if (picked == null || (current != null && current !in it.chapters) || (current == picked.name && !picked.isFromHistory)) {
 					val manga = it.toManga()
 					val hist = historyRepository.getOne(manga)
-					val branch = manga.getPreferredBranch(hist)
+					val distinctBranches = it.chapters.keys.filterNotNull().filter { b -> b.isNotBlank() }
+					val branch = if (distinctBranches.size > 1) {
+						null
+					} else {
+						manga.getPreferredBranch(hist)
+					}
 					selectedBranch.value = branch
 					defaultBranch = DefaultBranch(
 						name = branch,
